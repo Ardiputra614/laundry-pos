@@ -1,0 +1,63 @@
+CREATE TABLE IF NOT EXISTS subscription_plans (
+    id CHAR(36) PRIMARY KEY,
+    name VARCHAR(100) NOT NULL,
+    code VARCHAR(20) NOT NULL UNIQUE,
+    description TEXT,
+    price_monthly DECIMAL(15,2) NOT NULL DEFAULT 0,
+    price_yearly DECIMAL(15,2) NOT NULL DEFAULT 0,
+    max_users INT NOT NULL DEFAULT 5,
+    max_branches INT NOT NULL DEFAULT 1,
+    max_outlets INT NOT NULL DEFAULT 1,
+    features JSON,
+    is_active TINYINT(1) NOT NULL DEFAULT 1,
+    sort_order INT NOT NULL DEFAULT 0,
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    INDEX idx_plans_active (is_active),
+    INDEX idx_plans_sort (sort_order)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS subscriptions (
+    id CHAR(36) PRIMARY KEY,
+    tenant_id CHAR(36) NOT NULL,
+    company_id CHAR(36) NOT NULL,
+    plan_id CHAR(36) NOT NULL,
+    status VARCHAR(20) NOT NULL DEFAULT 'trial',
+    billing_cycle VARCHAR(10) NOT NULL DEFAULT 'monthly',
+    amount DECIMAL(15,2) NOT NULL DEFAULT 0,
+    started_at DATETIME(3),
+    trial_ends_at DATETIME(3),
+    current_period_start DATETIME(3),
+    current_period_end DATETIME(3),
+    cancelled_at DATETIME(3),
+    auto_renew TINYINT(1) NOT NULL DEFAULT 1,
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    deleted_at DATETIME(3),
+    INDEX idx_subs_tenant (tenant_id),
+    INDEX idx_subs_company (company_id),
+    INDEX idx_subs_status (status),
+    INDEX idx_subs_deleted (deleted_at)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS invoices (
+    id CHAR(36) PRIMARY KEY,
+    tenant_id CHAR(36) NOT NULL,
+    company_id CHAR(36) NOT NULL,
+    subscription_id CHAR(36),
+    invoice_number VARCHAR(50) NOT NULL UNIQUE,
+    status VARCHAR(20) NOT NULL DEFAULT 'pending',
+    amount DECIMAL(15,2) NOT NULL DEFAULT 0,
+    tax_amount DECIMAL(15,2) NOT NULL DEFAULT 0,
+    total_amount DECIMAL(15,2) NOT NULL DEFAULT 0,
+    due_date DATE,
+    paid_at DATETIME(3),
+    payment_method VARCHAR(50),
+    payment_channel VARCHAR(50),
+    midtrans_transaction_id VARCHAR(255),
+    created_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3),
+    updated_at DATETIME(3) NOT NULL DEFAULT CURRENT_TIMESTAMP(3) ON UPDATE CURRENT_TIMESTAMP(3),
+    INDEX idx_invoices_tenant (tenant_id),
+    INDEX idx_invoices_company (company_id),
+    INDEX idx_invoices_status (status)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;

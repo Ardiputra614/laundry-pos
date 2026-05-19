@@ -1,0 +1,5 @@
+DROP TABLE IF EXISTS notifications;
+DROP TABLE IF EXISTS activity_logs;
+DROP TABLE IF EXISTS sync_logs;
+DROP TABLE IF EXISTS devices;
+DROP TABLE IF EXISTS payments;

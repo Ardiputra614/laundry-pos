@@ -1,0 +1,33 @@
+# Go
+backend/server
+backend/tmp/
+*.exe
+*.test
+*.out
+
+# Env
+.env
+!.env.example
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docker
+mysql_data/
+redis_data/
+minio_data/
+
+# Node
+node_modules/
+mobile/.expo/
+mobile/dist/
+
+# GoLand
+out/

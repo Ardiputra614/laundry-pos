@@ -1,0 +1,2 @@
+DROP TABLE IF EXISTS outlets;
+DROP TABLE IF EXISTS branches;
