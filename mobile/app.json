@@ -1,0 +1,53 @@
+{
+  "expo": {
+    "name": "Arve Laundry",
+    "slug": "laundry-pos",
+    "version": "1.0.0",
+    "orientation": "default",
+    "icon": "./assets/icon.png",
+    "scheme": "laundry-pos",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "backgroundColor": "#2563EB"
+    },
+    "assetBundlePatterns": [
+      "**/*"
+    ],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.laundry.pos",
+      "infoPlist": {
+        "NSBluetoothAlwaysUsageDescription": "Bluetooth digunakan untuk mencetak struk ke printer thermal",
+        "NSBluetoothPeripheralUsageDescription": "Bluetooth digunakan untuk mencetak struk ke printer thermal"
+      }
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#2563EB"
+      },
+      "package": "com.laundry.pos",
+      "permissions": [
+        "android.permission.BLUETOOTH",
+        "android.permission.BLUETOOTH_ADMIN",
+        "android.permission.BLUETOOTH_SCAN",
+        "android.permission.BLUETOOTH_CONNECT",
+        "android.permission.ACCESS_FINE_LOCATION"
+      ]
+    },
+    "plugins": [
+      "expo-router",
+      "expo-sqlite",
+      "expo-secure-store",
+      "expo-dev-client"
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "router": {},
+      "eas": {
+        "projectId": "aa29a7d0-ac65-4ace-bc30-a329db3b22de"
+      }
+    }
+  }
+}

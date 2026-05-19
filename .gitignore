@@ -26,6 +26,9 @@ minio_data/
 
 # Node
 node_modules/
+.expo/
+dist/
+mobile/node_modules/
 mobile/.expo/
 mobile/dist/
 
