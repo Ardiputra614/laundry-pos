@@ -1,6 +1,6 @@
 import React from 'react';
 import { View, ActivityIndicator, StyleSheet } from 'react-native';
-import { colors } from '@/lib/theme';
+import { useColors } from '@/lib/theme';
 import { ThemedText } from './ThemedText';
 
 interface LoadingScreenProps {
@@ -8,6 +8,8 @@ interface LoadingScreenProps {
 }
 
 export function LoadingScreen({ message = 'Loading...' }: LoadingScreenProps) {
+  const colors = useColors();
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
   return (
     <View style={styles.container}>
       <ActivityIndicator size="large" color={colors.primary} />
@@ -18,14 +20,16 @@ export function LoadingScreen({ message = 'Loading...' }: LoadingScreenProps) {
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    backgroundColor: colors.background,
-  },
-  text: {
-    marginTop: 16,
-  },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    container: {
+      flex: 1,
+      justifyContent: 'center',
+      alignItems: 'center',
+      backgroundColor: colors.background,
+    },
+    text: {
+      marginTop: 16,
+    },
+  });
+}

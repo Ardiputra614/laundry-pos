@@ -10,13 +10,15 @@ type OrderItemRequest struct {
 }
 
 type CreateOrderRequest struct {
-	CustomerID  string             `json:"customer_id"`
-	OrderType   string             `json:"order_type"`
-	ServiceType string             `json:"service_type"`
-	Items       []OrderItemRequest `json:"items" binding:"required,min=1"`
-	Notes       string             `json:"notes"`
-	PickupDate  string             `json:"pickup_date"`
-	DeliveryDate string            `json:"delivery_date"`
+	CustomerID     string             `json:"customer_id"`
+	OrderType      string             `json:"order_type"`
+	ServiceType    string             `json:"service_type"`
+	Items          []OrderItemRequest `json:"items" binding:"required,min=1"`
+	DiscountAmount float64            `json:"discount_amount"`
+	TaxAmount      float64            `json:"tax_amount"`
+	Notes          string             `json:"notes"`
+	PickupDate     string             `json:"pickup_date"`
+	DeliveryDate   string             `json:"delivery_date"`
 }
 
 type UpdateOrderStatusRequest struct {

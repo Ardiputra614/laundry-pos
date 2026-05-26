@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, Alert, TouchableOpacity, Modal, FlatList, ActivityIndicator, KeyboardAvoidingView, Platform, RefreshControl } from 'react-native';
+import { View, StyleSheet, ScrollView, Alert, TouchableOpacity, Modal, ActivityIndicator, FlatList, RefreshControl } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
 import { ThemedView } from '@/components/ThemedView';
@@ -8,8 +8,10 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { Input } from '@/components/Input';
 import { StatusBadge } from '@/components/StatusBadge';
-import { LoadingScreen } from '@/components/LoadingScreen';
-import { colors, spacing, borderRadius, fontSize } from '@/lib/theme';
+import { useColors, useThemeStore, spacing, borderRadius } from '@/lib/theme';
+import { useI18nStore } from '@/stores/i18nStore';
+import { useSubscriptionStore } from '@/stores/subscriptionStore';
+import { t, Language } from '@/lib/i18n';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/lib/api';
 import Toast from 'react-native-toast-message';
@@ -17,29 +19,28 @@ import * as Print from 'expo-print';
 import { scanPrinters, connectPrinter, disconnectPrinter, printESC, buildReceipt } from '@/lib/blePrinter';
 import { savePrinter, getSavedPrinter, removeSavedPrinter, SavedPrinter } from '@/lib/printerStore';
 
-interface Plan {
-  id: string; name: string; code: string; description: string;
-  price_monthly: number; price_yearly: number; max_users: number;
-  max_branches: number; features: any; is_active: boolean; sort_order: number;
-}
-
 export default function ProfileScreen() {
+  const colors = useColors();
+  const { isDark, toggleTheme } = useThemeStore();
+  const { language, setLanguage } = useI18nStore();
+  const { status: subStatus } = useSubscriptionStore();
   const { user, logout } = useAuth();
+  const isPending = subStatus === 'pending';
+  const isActive = subStatus === 'active' || subStatus === 'trial';
   const router = useRouter();
-  const isSuperadmin = user?.role === 'superadmin';
 
   const [subscription, setSubscription] = useState<any>(null);
 
   // Settings modals
   const [showChangePw, setShowChangePw] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
-  const [showLanguage, setShowLanguage] = useState(false);
   const [showPrinter, setShowPrinter] = useState(false);
+  const [showLanguage, setShowLanguage] = useState(false);
+  const [showTheme, setShowTheme] = useState(false);
   const [oldPassword, setOldPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [changingPw, setChangingPw] = useState(false);
-  const [selectedLang, setSelectedLang] = useState('id');
 
   // Printer
   const [bleScanning, setBleScanning] = useState(false);
@@ -48,59 +49,27 @@ export default function ProfileScreen() {
   const [savedPrinter, setSavedPrinter] = useState<SavedPrinter | null>(null);
   const [bleConnected, setBleConnected] = useState(false);
 
-  // Superadmin state
-  const [stats, setStats] = useState<any>(null);
-  const [companies, setCompanies] = useState<any[]>([]);
-  const [plans, setPlans] = useState<Plan[]>([]);
-  const [loading, setLoading] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
-  const [sATab, setSATab] = useState<'overview' | 'companies' | 'plans'>('overview');
-
-  // Plan modal
-  const [showPlanModal, setShowPlanModal] = useState(false);
-  const [editingPlan, setEditingPlan] = useState<Plan | null>(null);
-  const [planName, setPlanName] = useState('');
-  const [planCode, setPlanCode] = useState('');
-  const [planDesc, setPlanDesc] = useState('');
-  const [planPriceMonthly, setPlanPriceMonthly] = useState('');
-  const [planPriceYearly, setPlanPriceYearly] = useState('');
-  const [planMaxUsers, setPlanMaxUsers] = useState('5');
-  const [planMaxBranches, setPlanMaxBranches] = useState('1');
-  const [savingPlan, setSavingPlan] = useState(false);
 
   useEffect(() => {
     fetchSubscription();
-    if (isSuperadmin) fetchSuperData();
   }, []);
 
   const fetchSubscription = async () => {
     try { const { data } = await api.get('/subscription'); setSubscription(data.data); } catch {}
   };
 
-  const fetchSuperData = async () => {
-    try {
-      setLoading(true);
-      const [statsRes, compRes, planRes] = await Promise.all([
-        api.get('/superadmin/dashboard/stats'),
-        api.get('/superadmin/companies?limit=50'),
-        api.get('/superadmin/plans'),
-      ]);
-      setStats(statsRes.data.data);
-      setCompanies(compRes.data.data || []);
-      setPlans(planRes.data.data || []);
-    } catch {}
-    setLoading(false);
-  };
-
   const onRefresh = async () => {
     setRefreshing(true);
     await fetchSubscription();
-    if (isSuperadmin) await fetchSuperData();
     setRefreshing(false);
   };
 
   // ---- Printer ----
-  React.useEffect(() => { if (showPrinter) loadSaved(); }, [showPrinter]);
+  React.useEffect(() => { if (showPrinter) {
+    if (isPending) { setShowPrinter(false); return; }
+    loadSaved();
+  } }, [showPrinter]);
   const loadSaved = async () => { const s = await getSavedPrinter(); setSavedPrinter(s); };
   const handleSavePrinter = async (dev: any) => {
     await savePrinter({ id: dev.id, name: dev.name || 'Printer' });
@@ -147,60 +116,6 @@ export default function ProfileScreen() {
     setBleScanning(false);
   };
 
-  // ---- Superadmin ----
-  const openAddPlan = () => {
-    setEditingPlan(null); setPlanName(''); setPlanCode(''); setPlanDesc('');
-    setPlanPriceMonthly(''); setPlanPriceYearly(''); setPlanMaxUsers('5'); setPlanMaxBranches('1');
-    setShowPlanModal(true);
-  };
-  const openEditPlan = (plan: Plan) => {
-    setEditingPlan(plan); setPlanName(plan.name); setPlanCode(plan.code);
-    setPlanDesc(plan.description || ''); setPlanPriceMonthly(plan.price_monthly.toString());
-    setPlanPriceYearly(plan.price_yearly.toString()); setPlanMaxUsers(plan.max_users.toString());
-    setPlanMaxBranches(plan.max_branches.toString()); setShowPlanModal(true);
-  };
-  const savePlan = async () => {
-    if (!planName.trim() || !planCode.trim()) {
-      Toast.show({ type: 'error', text1: 'Gagal', text2: 'Nama dan kode paket wajib diisi' }); return;
-    }
-    setSavingPlan(true);
-    try {
-      const payload = {
-        name: planName, code: planCode, description: planDesc,
-        price_monthly: parseFloat(planPriceMonthly) || 0, price_yearly: parseFloat(planPriceYearly) || 0,
-        max_users: parseInt(planMaxUsers) || 5, max_branches: parseInt(planMaxBranches) || 1,
-        max_outlets: parseInt(planMaxBranches) || 1, features: {}, is_active: true, sort_order: 0,
-      };
-      if (editingPlan) { await api.put(`/superadmin/plans/${editingPlan.id}`, payload); Toast.show({ type: 'success', text1: 'Berhasil', text2: 'Paket diperbarui' }); }
-      else { await api.post('/superadmin/plans', payload); Toast.show({ type: 'success', text1: 'Berhasil', text2: 'Paket ditambahkan' }); }
-      setShowPlanModal(false); fetchSuperData();
-    } catch (error: any) { Toast.show({ type: 'error', text1: 'Gagal', text2: error.response?.data?.message || error.message }); }
-    setSavingPlan(false);
-  };
-  const deletePlan = (plan: Plan) => {
-    Alert.alert('Hapus Paket', `Yakin ingin menghapus ${plan.name}?`, [
-      { text: 'Batal', style: 'cancel' },
-      { text: 'Hapus', style: 'destructive', onPress: async () => {
-        try { await api.delete(`/superadmin/plans/${plan.id}`); Toast.show({ type: 'success', text1: 'Berhasil', text2: 'Paket dihapus' }); fetchSuperData(); }
-        catch (error: any) { Toast.show({ type: 'error', text1: 'Gagal', text2: error.response?.data?.message || error.message }); }
-      }},
-    ]);
-  };
-  const handleSuspend = (company: any) => {
-    Alert.alert(company.is_suspended ? 'Aktifkan Company' : 'Nonaktifkan Company',
-      `Yakin ingin ${company.is_suspended ? 'mengaktifkan' : 'menonaktifkan'} ${company.name}?`, [
-      { text: 'Batal', style: 'cancel' },
-      { text: company.is_suspended ? 'Aktifkan' : 'Nonaktifkan', style: company.is_suspended ? 'default' : 'destructive',
-        onPress: async () => {
-          try {
-            const url = company.is_suspended ? `/superadmin/companies/${company.id}/activate` : `/superadmin/companies/${company.id}/suspend`;
-            await api.put(url); Toast.show({ type: 'success', text1: 'Berhasil', text2: `Status ${company.name} diperbarui` }); fetchSuperData();
-          } catch (error: any) { Toast.show({ type: 'error', text1: 'Gagal', text2: error.response?.data?.message || error.message }); }
-        },
-      },
-    ]);
-  };
-
   const handleLogout = () => {
     Alert.alert('Logout', 'Yakin ingin logout?', [
       { text: 'Batal', style: 'cancel' },
@@ -220,6 +135,33 @@ export default function ProfileScreen() {
     setChangingPw(false);
   };
 
+  const styles = React.useMemo(() => StyleSheet.create({
+    content: { padding: spacing.md, paddingBottom: spacing.xxl },
+    header: { alignItems: 'center', marginBottom: spacing.lg, paddingVertical: spacing.lg },
+    avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center', marginBottom: spacing.md },
+    name: { marginBottom: spacing.xs },
+    section: { marginBottom: spacing.md },
+    sectionTitle: { marginBottom: spacing.sm },
+    logoutBtn: { marginTop: spacing.lg },
+    subsHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm },
+    subsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.sm },
+    modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
+    modalContent: { backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: spacing.lg, maxHeight: '80%' },
+    modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.lg },
+    aboutSection: { alignItems: 'center', paddingVertical: spacing.lg },
+    savedPrinterCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.primaryLight, borderRadius: borderRadius.lg, padding: spacing.md },
+    savedPrinterLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: spacing.sm },
+    printerIconWrap: { width: 48, height: 48, borderRadius: borderRadius.md, backgroundColor: colors.white, justifyContent: 'center', alignItems: 'center' },
+    statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 4 },
+    savedPrinterActions: { flexDirection: 'row', gap: spacing.xs },
+    iconBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.white, justifyContent: 'center', alignItems: 'center' },
+    noPrinterBox: { alignItems: 'center', paddingVertical: spacing.lg },
+    bleDeviceRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+    miniBtn: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+    langBtn: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, borderRadius: borderRadius.md, backgroundColor: colors.gray100 },
+    langBtnActive: { backgroundColor: colors.primary },
+  }), [colors]);
+
   return (
     <ThemedView>
       <ScrollView contentContainerStyle={styles.content}
@@ -235,117 +177,8 @@ export default function ProfileScreen() {
           {user?.role && <StatusBadge status={user.role} />}
         </View>
 
-        {/* === SUPERADMIN: Stats Overview === */}
-        {isSuperadmin && stats && (
-          <View style={styles.statsGrid}>
-            <Card style={styles.statCard}>
-              <Ionicons name="business-outline" size={24} color={colors.primary} />
-              <ThemedText variant="hero" color={colors.primary}>{stats.total_companies}</ThemedText>
-              <ThemedText variant="caption">Total Company</ThemedText>
-            </Card>
-            <Card style={styles.statCard}>
-              <Ionicons name="checkmark-circle-outline" size={24} color={colors.success} />
-              <ThemedText variant="hero" color={colors.success}>{stats.active_companies}</ThemedText>
-              <ThemedText variant="caption">Aktif</ThemedText>
-            </Card>
-            <Card style={styles.statCard}>
-              <Ionicons name="alert-circle-outline" size={24} color={colors.warning} />
-              <ThemedText variant="hero" color={colors.warning}>{stats.suspended_companies}</ThemedText>
-              <ThemedText variant="caption">Dinonaktifkan</ThemedText>
-            </Card>
-            <Card style={styles.statCard}>
-              <Ionicons name="flask-outline" size={24} color={colors.info} />
-              <ThemedText variant="hero" color={colors.info}>{stats.trial_companies}</ThemedText>
-              <ThemedText variant="caption">Trial</ThemedText>
-            </Card>
-          </View>
-        )}
-
-        {/* === SUPERADMIN: Tab nav === */}
-        {isSuperadmin && (
-          <View style={styles.tabRow}>
-            {(['overview', 'companies', 'plans'] as const).map((t) => (
-              <TouchableOpacity key={t} style={[styles.tabBtn, sATab === t && styles.tabActive]} onPress={() => setSATab(t)}>
-                <ThemedText color={sATab === t ? colors.white : colors.textSecondary}>
-                  {t === 'overview' ? 'Overview' : t === 'companies' ? 'Companies' : 'Paket'}
-                </ThemedText>
-              </TouchableOpacity>
-            ))}
-          </View>
-        )}
-
-        {/* === SUPERADMIN: Overview tab === */}
-        {isSuperadmin && sATab === 'overview' && stats && (
-          <Card style={styles.section}>
-            <ThemedText variant="heading" style={styles.sectionTitle}>Ringkasan</ThemedText>
-            <StatRow label="Langganan Aktif" value={stats.active_subscriptions} />
-            <StatRow label="Company Baru (Bulan Ini)" value={stats.new_companies_this_month} />
-            <StatRow label="Pendapatan Bulan Ini" value={`Rp ${(stats.monthly_revenue || 0).toLocaleString()}`} />
-            <StatRow label="Total Pendapatan" value={`Rp ${(stats.total_revenue || 0).toLocaleString()}`} />
-          </Card>
-        )}
-
-        {/* === SUPERADMIN: Companies tab === */}
-        {isSuperadmin && sATab === 'companies' && (
-          companies.map((company) => (
-            <Card key={company.id} style={styles.companyCard}>
-              <View style={styles.companyHeader}>
-                <View style={styles.companyInfo}>
-                  <ThemedText variant="body" weight="semibold">{company.name}</ThemedText>
-                  <ThemedText variant="caption" color={colors.textSecondary}>{company.email}</ThemedText>
-                </View>
-                <StatusBadge status={company.is_suspended ? 'suspended' : company.sub_status} type="subscription" />
-              </View>
-              <View style={styles.companyMeta}>
-                <MetaBadge icon="people-outline" text={`${company.user_count} user`} />
-                <MetaBadge icon="business-outline" text={company.plan} />
-                <MetaBadge icon="calendar-outline" text={new Date(company.created_at).toLocaleDateString('id-ID')} />
-              </View>
-              <View style={styles.companyActions}>
-                <Button title={company.is_suspended ? 'Aktifkan' : 'Nonaktifkan'} variant={company.is_suspended ? 'outline' : 'danger'} size="sm" onPress={() => handleSuspend(company)} />
-              </View>
-            </Card>
-          ))
-        )}
-
-        {/* === SUPERADMIN: Plans tab === */}
-        {isSuperadmin && sATab === 'plans' && (
-          <>
-            <View style={styles.planHeader}>
-              <ThemedText variant="heading">Paket Langganan</ThemedText>
-              <TouchableOpacity onPress={openAddPlan}>
-                <Ionicons name="add-circle" size={28} color={colors.primary} />
-              </TouchableOpacity>
-            </View>
-            {plans.map((plan) => (
-              <Card key={plan.id} style={styles.planCard}>
-                <View style={styles.planTop}>
-                  <View>
-                    <ThemedText variant="body" weight="semibold">{plan.name}</ThemedText>
-                    <ThemedText variant="caption" color={colors.textSecondary}>Kode: {plan.code}</ThemedText>
-                  </View>
-                  <StatusBadge status={plan.is_active ? 'active' : 'inactive'} type="subscription" />
-                </View>
-                <View style={styles.planPrices}>
-                  <ThemedText variant="body">Rp {(plan.price_monthly || 0).toLocaleString()}/bln</ThemedText>
-                  <ThemedText variant="caption" color={colors.textSecondary}>|</ThemedText>
-                  <ThemedText variant="body">Rp {(plan.price_yearly || 0).toLocaleString()}/thn</ThemedText>
-                </View>
-                <View style={styles.planLimits}>
-                  <MetaBadge icon="people-outline" text={`${plan.max_users} user`} />
-                  <MetaBadge icon="business-outline" text={`${plan.max_branches} cabang`} />
-                </View>
-                <View style={styles.planActions}>
-                  <Button title="Edit" variant="outline" size="sm" onPress={() => openEditPlan(plan)} />
-                  <Button title="Hapus" variant="danger" size="sm" onPress={() => deletePlan(plan)} />
-                </View>
-              </Card>
-            ))}
-          </>
-        )}
-
-        {/* === COMPANY ADMIN: Subscription Info === */}
-        {!isSuperadmin && subscription && (
+        {/* === SUBSCRIPTION INFO === */}
+        {subscription && (
           <Card style={styles.section}>
             <View style={styles.subsHeader}>
               <Ionicons name="diamond-outline" size={20} color={colors.primary} />
@@ -369,29 +202,27 @@ export default function ProfileScreen() {
         )}
 
         {/* === ACCOUNT INFO === */}
-        {!isSuperadmin && (
-          <Card style={styles.section}>
-            <ThemedText variant="heading" style={styles.sectionTitle}>Info Akun</ThemedText>
-            <InfoRow icon="person-outline" label="Nama" value={user?.full_name} />
-            <InfoRow icon="mail-outline" label="Email" value={user?.email} />
-            <InfoRow icon="call-outline" label="Telepon" value={user?.phone} />
-            <InfoRow icon="shield-checkmark-outline" label="Role" value={user?.role} />
-          </Card>
-        )}
+        <Card style={styles.section}>
+          <ThemedText variant="heading" style={styles.sectionTitle}>Info Akun</ThemedText>
+          <InfoRow icon="person-outline" label="Nama" value={user?.full_name} />
+          <InfoRow icon="mail-outline" label="Email" value={user?.email} />
+          <InfoRow icon="call-outline" label="Telepon" value={user?.phone} />
+          <InfoRow icon="shield-checkmark-outline" label="Role" value={user?.role} />
+        </Card>
 
-        {/* === SUBSCRIPTION MENU (company) === */}
-        {!isSuperadmin && (
-          <Card style={styles.section}>
-            <TouchableRow icon="diamond-outline" label="Langganan & Paket" onPress={() => router.push('/(app)/subscription' as any)} />
-          </Card>
-        )}
+        {/* === SUBSCRIPTION MENU === */}
+        <Card style={styles.section}>
+          <TouchableRow icon="diamond-outline" label="Langganan & Paket" onPress={() => router.push('/(app)/subscription' as any)} />
+        </Card>
 
         {/* === SETTINGS === */}
         <Card style={styles.section}>
           <ThemedText variant="heading" style={styles.sectionTitle}>Pengaturan</ThemedText>
-          <TouchableRow icon="print-outline" label="Printer Struk" onPress={() => setShowPrinter(true)} />
           <TouchableRow icon="lock-closed-outline" label="Ubah Password" onPress={() => setShowChangePw(true)} />
           <TouchableRow icon="language-outline" label="Bahasa" onPress={() => setShowLanguage(true)} />
+          <TouchableRow icon={isDark ? 'moon-outline' : 'sunny-outline'} label="Tampilan" onPress={() => setShowTheme(true)} />
+          <TouchableRow icon="settings-outline" label="Pajak & Diskon" onPress={() => isPending ? router.push('/(app)/subscription' as any) : router.push('/(app)/settings' as any)} locked={isPending} />
+          <TouchableRow icon="print-outline" label="Printer Struk" onPress={() => isPending ? router.push('/(app)/subscription' as any) : setShowPrinter(true)} locked={isPending} />
           <TouchableRow icon="information-circle-outline" label="Tentang" onPress={() => setShowAbout(true)} />
         </Card>
 
@@ -418,17 +249,51 @@ export default function ProfileScreen() {
       <Modal visible={showLanguage} animationType="slide" transparent>
         <View style={styles.modalOverlay}><View style={styles.modalContent}>
           <View style={styles.modalHeader}>
-            <ThemedText variant="heading">Pilih Bahasa</ThemedText>
+            <ThemedText variant="heading">Bahasa</ThemedText>
             <TouchableOpacity onPress={() => setShowLanguage(false)}><Ionicons name="close" size={24} color={colors.text} /></TouchableOpacity>
           </View>
-          {[{ code: 'id', label: 'Bahasa Indonesia' }, { code: 'en', label: 'English' }].map((lang) => (
-            <TouchableOpacity key={lang.code} style={[styles.langItem, selectedLang === lang.code && styles.langItemActive]}
-              onPress={() => { setSelectedLang(lang.code); setShowLanguage(false); Toast.show({ type: 'success', text1: 'Berhasil', text2: `Bahasa diubah ke ${lang.label}` }); }}
+          <View style={{ gap: spacing.sm, paddingVertical: spacing.md }}>
+            <TouchableOpacity
+              style={[styles.langBtn, language === 'id' && styles.langBtnActive]}
+              onPress={() => { setLanguage('id'); setShowLanguage(false); }}
             >
-              <ThemedText variant="body" weight={selectedLang === lang.code ? 'semibold' : 'regular'} color={selectedLang === lang.code ? colors.primary : colors.text}>{lang.label}</ThemedText>
-              {selectedLang === lang.code && <Ionicons name="checkmark-circle" size={22} color={colors.primary} />}
+              <Ionicons name="language-outline" size={22} color={language === 'id' ? colors.white : colors.text} />
+              <ThemedText variant="body" weight="semibold" color={language === 'id' ? colors.white : colors.text}>Indonesia</ThemedText>
             </TouchableOpacity>
-          ))}
+            <TouchableOpacity
+              style={[styles.langBtn, language === 'en' && styles.langBtnActive]}
+              onPress={() => { setLanguage('en'); setShowLanguage(false); }}
+            >
+              <Ionicons name="language-outline" size={22} color={language === 'en' ? colors.white : colors.text} />
+              <ThemedText variant="body" weight="semibold" color={language === 'en' ? colors.white : colors.text}>English</ThemedText>
+            </TouchableOpacity>
+          </View>
+        </View></View>
+      </Modal>
+
+      {/* Theme */}
+      <Modal visible={showTheme} animationType="slide" transparent>
+        <View style={styles.modalOverlay}><View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <ThemedText variant="heading">Tampilan</ThemedText>
+            <TouchableOpacity onPress={() => setShowTheme(false)}><Ionicons name="close" size={24} color={colors.text} /></TouchableOpacity>
+          </View>
+          <View style={{ gap: spacing.sm, paddingVertical: spacing.md }}>
+            <TouchableOpacity
+              style={[styles.langBtn, !isDark && styles.langBtnActive]}
+              onPress={() => { useThemeStore.getState().setTheme(false); setShowTheme(false); }}
+            >
+              <Ionicons name="sunny-outline" size={22} color={!isDark ? colors.white : colors.text} />
+              <ThemedText variant="body" weight="semibold" color={!isDark ? colors.white : colors.text}>Terang</ThemedText>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.langBtn, isDark && styles.langBtnActive]}
+              onPress={() => { useThemeStore.getState().setTheme(true); setShowTheme(false); }}
+            >
+              <Ionicons name="moon-outline" size={22} color={isDark ? colors.white : colors.text} />
+              <ThemedText variant="body" weight="semibold" color={isDark ? colors.white : colors.text}>Gelap</ThemedText>
+            </TouchableOpacity>
+          </View>
         </View></View>
       </Modal>
 
@@ -528,36 +393,15 @@ export default function ProfileScreen() {
           )}
         </View></View>
       </Modal>
-
-      {/* Plan Modal (superadmin) */}
-      <Modal visible={showPlanModal} animationType="slide" transparent>
-        <View style={styles.modalOverlay}>
-          <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={styles.modalContent}>
-            <View style={styles.modalHeader}>
-              <ThemedText variant="heading">{editingPlan ? 'Edit Paket' : 'Tambah Paket'}</ThemedText>
-              <TouchableOpacity onPress={() => setShowPlanModal(false)}><Ionicons name="close" size={24} color={colors.text} /></TouchableOpacity>
-            </View>
-            <ScrollView showsVerticalScrollIndicator={false}>
-              <Input label="Nama Paket *" placeholder="Basic, Professional, dll" value={planName} onChangeText={setPlanName} />
-              <Input label="Kode *" placeholder="basic, professional, enterprise" value={planCode} onChangeText={setPlanCode} autoCapitalize="none" />
-              <Input label="Deskripsi" placeholder="Deskripsi paket" value={planDesc} onChangeText={setPlanDesc} multiline numberOfLines={2} />
-              <Input label="Harga Bulanan" placeholder="199000" value={planPriceMonthly} onChangeText={setPlanPriceMonthly} keyboardType="numeric" />
-              <Input label="Harga Tahunan" placeholder="1990000" value={planPriceYearly} onChangeText={setPlanPriceYearly} keyboardType="numeric" />
-              <Input label="Max User" placeholder="5" value={planMaxUsers} onChangeText={setPlanMaxUsers} keyboardType="numeric" />
-              <Input label="Max Cabang" placeholder="1" value={planMaxBranches} onChangeText={setPlanMaxBranches} keyboardType="numeric" />
-              <Button title={editingPlan ? 'Simpan' : 'Tambah'} onPress={savePlan} loading={savingPlan} style={{ marginTop: 12 }} />
-            </ScrollView>
-          </KeyboardAvoidingView>
-        </View>
-      </Modal>
     </ThemedView>
   );
 }
 
 function InfoRow({ icon, label, value }: { icon: string; label: string; value?: string }) {
+  const colors = useColors();
   return (
-    <View style={[styles.row, styles.rowBorder]}>
-      <View style={styles.rowLeft}>
+    <View style={[helperStyles.row, helperStyles.rowBorder]}>
+      <View style={helperStyles.rowLeft}>
         <Ionicons name={icon as any} size={20} color={colors.gray400} />
         <ThemedText variant="body" color={colors.textSecondary}>{label}</ThemedText>
       </View>
@@ -566,82 +410,28 @@ function InfoRow({ icon, label, value }: { icon: string; label: string; value?: 
   );
 }
 
-function TouchableRow({ icon, label, onPress }: { icon: string; label: string; onPress: () => void }) {
+function TouchableRow({ icon, label, onPress, locked }: { icon: string; label: string; onPress: () => void; locked?: boolean }) {
+  const colors = useColors();
   return (
-    <TouchableOpacity style={[styles.row, styles.rowBorder]} onPress={onPress}>
-      <View style={styles.rowLeft}>
+    <TouchableOpacity
+      style={[helperStyles.row, helperStyles.rowBorder, locked && { opacity: 0.5 }]}
+      onPress={onPress}
+      disabled={false}
+    >
+      <View style={helperStyles.rowLeft}>
         <Ionicons name={icon as any} size={20} color={colors.gray400} />
         <ThemedText variant="body">{label}</ThemedText>
+        {locked && <Ionicons name="lock-closed" size={14} color={colors.danger} />}
       </View>
-      <Ionicons name="chevron-forward" size={20} color={colors.gray400} />
+      <Ionicons name={locked ? 'lock-closed' : 'chevron-forward'} size={20} color={colors.warning} />
     </TouchableOpacity>
   );
 }
 
-function StatRow({ label, value }: { label: string; value: any }) {
-  return (
-    <View style={styles.statRow}>
-      <ThemedText variant="body" color={colors.textSecondary}>{label}</ThemedText>
-      <ThemedText variant="body" weight="semibold">{value}</ThemedText>
-    </View>
-  );
-}
-
-function MetaBadge({ icon, text }: { icon: string; text: string }) {
-  return (
-    <View style={styles.metaBadge}>
-      <Ionicons name={icon as any} size={14} color={colors.gray400} />
-      <ThemedText variant="caption" color={colors.gray500}>{text}</ThemedText>
-    </View>
-  );
-}
-
-const styles = StyleSheet.create({
-  content: { padding: spacing.md, paddingBottom: spacing.xxl },
-  header: { alignItems: 'center', marginBottom: spacing.lg, paddingVertical: spacing.lg },
-  avatar: { width: 80, height: 80, borderRadius: 40, backgroundColor: colors.primary, justifyContent: 'center', alignItems: 'center', marginBottom: spacing.md },
-  name: { marginBottom: spacing.xs },
-  section: { marginBottom: spacing.md },
-  sectionTitle: { marginBottom: spacing.sm },
+const helperStyles = StyleSheet.create({
   row: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.md },
-  rowBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
+  rowBorder: { borderBottomWidth: 1, borderBottomColor: '#E5E7EB' },
   rowLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
-  logoutBtn: { marginTop: spacing.lg },
-  subsHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: spacing.sm },
-  subsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.sm },
-  modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
-  modalContent: { backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: spacing.lg, maxHeight: '80%' },
-  modalHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.lg },
-  langItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.md, paddingHorizontal: spacing.sm, borderRadius: borderRadius.md },
-  langItemActive: { backgroundColor: colors.primaryLight },
-  aboutSection: { alignItems: 'center', paddingVertical: spacing.lg },
-  bleDeviceRow: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  savedPrinterCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', backgroundColor: colors.primaryLight, borderRadius: borderRadius.lg, padding: spacing.md },
-  savedPrinterLeft: { flexDirection: 'row', alignItems: 'center', flex: 1, gap: spacing.sm },
-  printerIconWrap: { width: 48, height: 48, borderRadius: borderRadius.md, backgroundColor: colors.white, justifyContent: 'center', alignItems: 'center' },
-  statusDot: { width: 8, height: 8, borderRadius: 4, marginRight: 4 },
-  savedPrinterActions: { flexDirection: 'row', gap: spacing.xs },
-  iconBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: colors.white, justifyContent: 'center', alignItems: 'center' },
-  noPrinterBox: { alignItems: 'center', paddingVertical: spacing.lg },
-  miniBtn: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
-
-  // Superadmin styles
-  statsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, marginBottom: spacing.md },
-  statCard: { flex: 1, minWidth: '45%', alignItems: 'center', padding: spacing.md },
-  tabRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md },
-  tabBtn: { flex: 1, padding: spacing.sm, borderRadius: borderRadius.md, backgroundColor: colors.gray100, alignItems: 'center' },
-  tabActive: { backgroundColor: colors.primary },
-  statRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing.sm },
-  companyCard: { marginBottom: spacing.sm },
-  companyHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.sm },
-  companyInfo: { flex: 1 },
-  companyMeta: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.sm },
-  metaBadge: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
-  companyActions: { flexDirection: 'row', justifyContent: 'flex-end', borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm },
-  planHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
-  planCard: { marginBottom: spacing.sm },
-  planTop: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.sm },
-  planPrices: { flexDirection: 'row', gap: spacing.sm, alignItems: 'center', marginBottom: spacing.sm },
-  planLimits: { flexDirection: 'row', gap: spacing.md, marginBottom: spacing.sm },
-  planActions: { flexDirection: 'row', gap: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm },
 });
+
+

@@ -20,6 +20,7 @@ type OrderUsecase struct {
 	trackingRepo  domain.OrderTrackingRepository
 	serviceRepo   domain.ServiceRepository
 	paymentRepo   domain.PaymentRepository
+	settingRepo   domain.CompanySettingRepository
 }
 
 func NewOrderUsecase(
@@ -28,6 +29,7 @@ func NewOrderUsecase(
 	trackingRepo domain.OrderTrackingRepository,
 	serviceRepo domain.ServiceRepository,
 	paymentRepo domain.PaymentRepository,
+	settingRepo domain.CompanySettingRepository,
 ) *OrderUsecase {
 	return &OrderUsecase{
 		orderRepo:     orderRepo,
@@ -35,6 +37,7 @@ func NewOrderUsecase(
 		trackingRepo:  trackingRepo,
 		serviceRepo:   serviceRepo,
 		paymentRepo:   paymentRepo,
+		settingRepo:   settingRepo,
 	}
 }
 
@@ -87,15 +90,26 @@ func (uc *OrderUsecase) CreateOrder(ctx *gin.Context, req dto.CreateOrderRequest
 		}
 	}
 
+	// Get company settings for auto-calculations
+	settings, _ := uc.settingRepo.FindByTenant(tenantID)
+	discountEnabled := settings != nil && settings.DiscountEnabled
+	taxEnabled := settings != nil && settings.TaxEnabled
+	defaultTaxRate := float64(0)
+	if settings != nil {
+		defaultTaxRate = settings.DefaultTaxRate
+	}
+
 	var items []domain.OrderItem
 	var subtotal float64
 	var totalWeight float64
+	var totalDiscount float64
 
 	for _, itemReq := range req.Items {
 		serviceName := itemReq.ServiceName
 		serviceID := itemReq.ServiceID
 		unit := itemReq.Unit
 		isWeight := false
+		discountPercent := float64(0)
 
 		if serviceID == "" && serviceName == "" {
 			return nil, http.StatusBadRequest, fmt.Errorf("service_id or service_name is required")
@@ -114,6 +128,7 @@ func (uc *OrderUsecase) CreateOrder(ctx *gin.Context, req dto.CreateOrderRequest
 				unit = service.Unit
 			}
 			isWeight = service.PriceType == domain.PriceTypeWeight
+			discountPercent = service.DiscountPercent
 		}
 
 		if unit == "" {
@@ -121,7 +136,12 @@ func (uc *OrderUsecase) CreateOrder(ctx *gin.Context, req dto.CreateOrderRequest
 		}
 
 		itemSubtotal := itemReq.Quantity * itemReq.UnitPrice
+		itemDiscount := float64(0)
+		if discountEnabled && discountPercent > 0 {
+			itemDiscount = itemSubtotal * (discountPercent / 100)
+		}
 		subtotal += itemSubtotal
+		totalDiscount += itemDiscount
 
 		if isWeight {
 			totalWeight += itemReq.Quantity
@@ -140,12 +160,21 @@ func (uc *OrderUsecase) CreateOrder(ctx *gin.Context, req dto.CreateOrderRequest
 		})
 	}
 
+	netSubtotal := subtotal - totalDiscount
+	taxAmount := float64(0)
+	if taxEnabled && defaultTaxRate > 0 {
+		taxAmount = netSubtotal * (defaultTaxRate / 100)
+	}
+
 	order.Subtotal = subtotal
 	order.TotalWeight = totalWeight
 	order.TotalItems = len(items)
-	order.DiscountAmount = 0
-	order.TaxAmount = 0
-	order.GrandTotal = subtotal
+	order.DiscountAmount = totalDiscount
+	order.TaxAmount = taxAmount
+	order.GrandTotal = netSubtotal + taxAmount
+	if order.GrandTotal < 0 {
+		order.GrandTotal = 0
+	}
 
 	estimatedDone := now.Add(24 * time.Hour)
 	order.EstimatedDoneAt = &estimatedDone

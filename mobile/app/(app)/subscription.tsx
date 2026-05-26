@@ -6,7 +6,7 @@ import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
 import { StatusBadge } from '@/components/StatusBadge';
 import { LoadingScreen } from '@/components/LoadingScreen';
-import { colors, spacing, borderRadius } from '@/lib/theme';
+import { useColors, spacing, borderRadius } from '@/lib/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/lib/api';
 import Toast from 'react-native-toast-message';
@@ -27,6 +27,7 @@ interface Plan {
 }
 
 export default function SubscriptionScreen() {
+  const colors = useColors();
   const [subscription, setSubscription] = useState<any>(null);
   const [plans, setPlans] = useState<Plan[]>([]);
   const [loading, setLoading] = useState(true);
@@ -99,6 +100,20 @@ export default function SubscriptionScreen() {
     if (price >= 1000) return `Rp ${(price / 1000).toFixed(0)}rb`;
     return `Rp ${price.toLocaleString()}`;
   };
+
+  const styles = React.useMemo(() => StyleSheet.create({
+    content: { paddingBottom: spacing.xxl },
+    header: { paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.md },
+    section: { marginHorizontal: spacing.md, marginBottom: spacing.md },
+    sectionTitle: { marginBottom: spacing.sm },
+    subsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.sm },
+    planCard: { marginHorizontal: spacing.md, marginBottom: spacing.md, borderWidth: 2, borderColor: colors.border, overflow: 'hidden' },
+    planCardActive: { borderColor: colors.primary },
+    currentBadge: { backgroundColor: colors.primary, alignSelf: 'flex-start', paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: borderRadius.full, marginBottom: spacing.sm },
+    planHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.xs },
+    planPrice: { alignItems: 'flex-end' },
+    featureList: { gap: spacing.sm },
+  }), [colors]);
 
   if (loading) return <LoadingScreen />;
 
@@ -229,25 +244,17 @@ export default function SubscriptionScreen() {
 }
 
 function Feature({ icon, text }: { icon: string; text: string }) {
+  const colors = useColors();
   return (
-    <View style={styles.featureItem}>
+    <View style={featureStyles.featureItem}>
       <Ionicons name={icon as any} size={18} color={colors.success} />
       <ThemedText variant="body">{text}</ThemedText>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  content: { paddingBottom: spacing.xxl },
-  header: { paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.md },
-  section: { marginHorizontal: spacing.md, marginBottom: spacing.md },
-  sectionTitle: { marginBottom: spacing.sm },
-  subsRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.sm },
-  planCard: { marginHorizontal: spacing.md, marginBottom: spacing.md, borderWidth: 2, borderColor: colors.border, overflow: 'hidden' },
-  planCardActive: { borderColor: colors.primary },
-  currentBadge: { backgroundColor: colors.primary, alignSelf: 'flex-start', paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderRadius: borderRadius.full, marginBottom: spacing.sm },
-  planHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: spacing.xs },
-  planPrice: { alignItems: 'flex-end' },
-  featureList: { gap: spacing.sm },
+const featureStyles = StyleSheet.create({
   featureItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
 });
+
+

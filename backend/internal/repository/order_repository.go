@@ -150,6 +150,18 @@ func (r *orderItemRepository) CreateBatch(items []domain.OrderItem) error {
 	return r.db.Create(&items).Error
 }
 
+func (r *orderItemRepository) FindByOrderIDs(orderIDs []string) ([]domain.OrderItem, error) {
+	if len(orderIDs) == 0 {
+		return nil, nil
+	}
+	var items []domain.OrderItem
+	err := r.db.Where("order_id IN ?", orderIDs).Order("created_at ASC").Find(&items).Error
+	if err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 func (r *orderItemRepository) FindByOrderID(orderID string) ([]domain.OrderItem, error) {
 	var items []domain.OrderItem
 	err := r.db.Where("order_id = ?", orderID).Order("created_at ASC").Find(&items).Error

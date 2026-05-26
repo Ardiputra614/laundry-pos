@@ -6,10 +6,11 @@ import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { Input } from '@/components/Input';
 import { Button } from '@/components/Button';
-import { colors, spacing } from '@/lib/theme';
+import { useColors, spacing } from '@/lib/theme';
 import Toast from 'react-native-toast-message';
 
 export default function RegisterScreen() {
+  const colors = useColors();
   const { register } = useAuth();
   const router = useRouter();
   const [fullName, setFullName] = useState('');

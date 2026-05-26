@@ -81,6 +81,7 @@ func (uc *ServiceUsecase) CreateService(ctx *gin.Context, req dto.CreateServiceR
 		PriceType:      domain.PriceType(req.PriceType),
 		Unit:           req.Unit,
 		BasePrice:      req.BasePrice,
+		DiscountPercent: req.DiscountPercent,
 		MinQuantity:    req.MinQuantity,
 		EstimatedHours: req.EstimatedHours,
 		IsActive:       true,
@@ -131,6 +132,9 @@ func (uc *ServiceUsecase) UpdateService(ctx *gin.Context, id string, req dto.Upd
 	if req.BasePrice >= 0 {
 		service.BasePrice = req.BasePrice
 	}
+	if req.DiscountPercent >= 0 {
+		service.DiscountPercent = req.DiscountPercent
+	}
 	if req.MinQuantity > 0 {
 		service.MinQuantity = req.MinQuantity
 	}
@@ -168,6 +172,25 @@ func (uc *ServiceUsecase) ListServices(ctx *gin.Context, page, limit int) ([]dto
 		responses = append(responses, *toServiceResponse(&s))
 	}
 	return responses, total, nil
+}
+
+func (uc *ServiceUsecase) DeleteService(ctx *gin.Context, id string) (int, error) {
+	tenantID := middleware.GetTenantID(ctx)
+
+	service, err := uc.serviceRepo.FindByID(id)
+	if err != nil {
+		return http.StatusNotFound, domain.ErrNotFound
+	}
+
+	if service.TenantID != tenantID {
+		return http.StatusNotFound, domain.ErrNotFound
+	}
+
+	if err := uc.serviceRepo.Delete(id); err != nil {
+		return http.StatusInternalServerError, err
+	}
+
+	return http.StatusOK, nil
 }
 
 func (uc *ServiceUsecase) ListActiveServices(ctx *gin.Context) ([]dto.ServiceResponse, error) {
@@ -209,6 +232,7 @@ func toServiceResponse(s *domain.Service) *dto.ServiceResponse {
 		PriceType:      string(s.PriceType),
 		Unit:           s.Unit,
 		BasePrice:      s.BasePrice,
+		DiscountPercent: s.DiscountPercent,
 		MinQuantity:    s.MinQuantity,
 		EstimatedHours: s.EstimatedHours,
 		IsActive:       s.IsActive,

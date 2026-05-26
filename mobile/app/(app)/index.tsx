@@ -7,9 +7,11 @@ import { ThemedText } from '@/components/ThemedText';
 import { Card } from '@/components/Card';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Button } from '@/components/Button';
-import { colors, spacing, fontSize } from '@/lib/theme';
+import { useColors, spacing, fontSize } from '@/lib/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/lib/api';
+import { dbOrders } from '@/lib/database';
+import { useAuthStore } from '@/stores/authStore';
 import { format } from 'date-fns';
 
 export default function DashboardScreen() {
@@ -18,13 +20,16 @@ export default function DashboardScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [stats, setStats] = useState({ orders_today: 0, revenue_today: 0, pending_orders: 0 });
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
+  const colors = useColors();
 
   const fetchDashboard = async () => {
     try {
-      const { data: ordersData } = await api.get('/orders?limit=5&sort=created_at:desc');
+      const todayStr = new Date().toISOString().slice(0, 10);
+      const { data: ordersData } = await api.get(`/orders?limit=50`);
       if (ordersData.data) {
-        setRecentOrders(ordersData.data);
-        const today = ordersData.data.filter((o: any) => {
+        const orders = ordersData.data;
+        setRecentOrders(orders.slice(0, 5));
+        const today = orders.filter((o: any) => {
           const d = new Date(o.created_at);
           const now = new Date();
           return d.toDateString() === now.toDateString();
@@ -32,10 +37,28 @@ export default function DashboardScreen() {
         setStats({
           orders_today: today.length,
           revenue_today: today.reduce((sum: number, o: any) => sum + (o.grand_total || 0), 0),
-          pending_orders: ordersData.data.filter((o: any) => o.status === 'pending').length,
+          pending_orders: orders.filter((o: any) => o.status === 'pending').length,
         });
+        const { tenantId, companyId } = useAuthStore.getState();
+        orders.forEach((o: any) =>
+          dbOrders.upsert({ ...o, tenant_id: o.tenant_id || tenantId, company_id: o.company_id || companyId }, 'synced')
+        );
       }
-    } catch {}
+    } catch {
+      const local = await dbOrders.getAll();
+      const recent = local.slice(0, 5);
+      setRecentOrders(recent);
+      const today = recent.filter((o: any) => {
+        const d = new Date(o.created_at);
+        const now = new Date();
+        return d.toDateString() === now.toDateString();
+      });
+      setStats({
+        orders_today: today.length,
+        revenue_today: today.reduce((sum: number, o: any) => sum + (o.grand_total || 0), 0),
+        pending_orders: recent.filter((o: any) => o.status === 'pending').length,
+      });
+    }
   };
 
   useEffect(() => { fetchDashboard(); }, []);
@@ -45,6 +68,23 @@ export default function DashboardScreen() {
     await fetchDashboard();
     setRefreshing(false);
   };
+
+  const styles = React.useMemo(() => StyleSheet.create({
+    scrollView: { flex: 1 },
+    content: { padding: spacing.md, paddingBottom: spacing.xxl },
+    header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.lg },
+    statsRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg },
+    statCard: { flex: 1, alignItems: 'center', padding: spacing.md },
+    quickActions: { marginBottom: spacing.lg },
+    sectionTitle: { marginBottom: spacing.sm },
+    sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
+    actionRow: { flexDirection: 'row', gap: spacing.sm },
+    actionButton: { flex: 1, alignItems: 'center', backgroundColor: colors.primaryLight, padding: spacing.md, borderRadius: 12 },
+    recentOrders: { marginBottom: spacing.lg },
+    orderCard: { marginBottom: spacing.sm },
+    orderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
+    orderDetails: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.xs },
+  }), [colors]);
 
   return (
     <ThemedView>
@@ -133,19 +173,4 @@ export default function DashboardScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  scrollView: { flex: 1 },
-  content: { padding: spacing.md, paddingBottom: spacing.xxl },
-  header: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.lg },
-  statsRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.lg },
-  statCard: { flex: 1, alignItems: 'center', padding: spacing.md },
-  quickActions: { marginBottom: spacing.lg },
-  sectionTitle: { marginBottom: spacing.sm },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.sm },
-  actionRow: { flexDirection: 'row', gap: spacing.sm },
-  actionButton: { flex: 1, alignItems: 'center', backgroundColor: colors.primaryLight, padding: spacing.md, borderRadius: 12 },
-  recentOrders: { marginBottom: spacing.lg },
-  orderCard: { marginBottom: spacing.sm },
-  orderHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.xs },
-  orderDetails: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: spacing.xs },
-});
+

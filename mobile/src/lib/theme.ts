@@ -1,8 +1,13 @@
-export const colors = {
-  primary: '#2563EB',
-  primaryDark: '#1D4ED8',
-  primaryLight: '#DBEAFE',
-  secondary: '#64748B',
+import { create } from 'zustand';
+import * as SecureStore from 'expo-secure-store';
+
+const STORAGE_KEY = 'laundry_pos_theme';
+
+export const lightColors = {
+  primary: '#8B6914',
+  primaryDark: '#6B4F0A',
+  primaryLight: '#F5EDD6',
+  secondary: '#8B7355',
   success: '#10B981',
   warning: '#F59E0B',
   danger: '#EF4444',
@@ -25,6 +30,71 @@ export const colors = {
   text: '#111827',
   textSecondary: '#6B7280',
 };
+
+export const darkColors = {
+  primary: '#A0782C',
+  primaryDark: '#C4953E',
+  primaryLight: '#3D2E1A',
+  secondary: '#8B7355',
+  success: '#34D399',
+  warning: '#FBBF24',
+  danger: '#F87171',
+  info: '#60A5FA',
+  white: '#1E1E1E',
+  black: '#FFFFFF',
+  gray50: '#1F1F1F',
+  gray100: '#2D2D2D',
+  gray200: '#3D3D3D',
+  gray300: '#555555',
+  gray400: '#888888',
+  gray500: '#AAAAAA',
+  gray600: '#CCCCCC',
+  gray700: '#DDDDDD',
+  gray800: '#EEEEEE',
+  gray900: '#F9F9F9',
+  background: '#121212',
+  surface: '#1E1E1E',
+  border: '#374151',
+  text: '#E5E7EB',
+  textSecondary: '#9CA3AF',
+};
+
+interface ThemeState {
+  isDark: boolean;
+  colors: typeof lightColors;
+  toggleTheme: () => void;
+  setTheme: (dark: boolean) => void;
+  loadTheme: () => Promise<void>;
+}
+
+export const useThemeStore = create<ThemeState>((set, get) => ({
+  isDark: false,
+  colors: lightColors,
+
+  toggleTheme: () => {
+    const next = !get().isDark;
+    SecureStore.setItemAsync(STORAGE_KEY, next ? 'dark' : 'light');
+    set({ isDark: next, colors: next ? darkColors : lightColors });
+  },
+
+  setTheme: (dark) => {
+    SecureStore.setItemAsync(STORAGE_KEY, dark ? 'dark' : 'light');
+    set({ isDark: dark, colors: dark ? darkColors : lightColors });
+  },
+
+  loadTheme: async () => {
+    try {
+      const stored = await SecureStore.getItemAsync(STORAGE_KEY);
+      if (stored === 'dark') {
+        set({ isDark: true, colors: darkColors });
+      }
+    } catch {}
+  },
+}));
+
+export function useColors() {
+  return useThemeStore((s) => s.colors);
+}
 
 export const spacing = {
   xs: 4,

@@ -6,10 +6,12 @@ import { ThemedText } from '@/components/ThemedText';
 import { Card } from '@/components/Card';
 import { Input } from '@/components/Input';
 import { Button } from '@/components/Button';
-import { colors, spacing, borderRadius } from '@/lib/theme';
+import { useColors, spacing, borderRadius } from '@/lib/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/lib/api';
+import { dbOrders, dbServices, dbSyncQueue } from '@/lib/database';
 import { useOrderStore } from '@/stores/orderStore';
+import { useAuthStore } from '@/stores/authStore';
 import Toast from 'react-native-toast-message';
 
 interface ServiceOption {
@@ -17,6 +19,7 @@ interface ServiceOption {
   name: string;
   unit: string;
   base_price: number;
+  discount_percent: number;
 }
 
 interface ManualService {
@@ -24,6 +27,7 @@ interface ManualService {
   quantity: string;
   unit: string;
   unit_price: string;
+  discount_percent: number;
 }
 
 const emptyForm = () => ({
@@ -37,8 +41,10 @@ const emptyForm = () => ({
 });
 
 export default function POSScreen() {
+  const colors = useColors();
   const router = useRouter();
   const { clearCurrentOrder } = useOrderStore();
+  const { tenantId, companyId } = useAuthStore();
   const [loading, setLoading] = useState(false);
   const [services, setServices] = useState<ServiceOption[]>([]);
   const [showServicePicker, setShowServicePicker] = useState(false);
@@ -51,6 +57,9 @@ export default function POSScreen() {
   const [notes, setNotes] = useState('');
   const [orderType, setOrderType] = useState<'dropoff' | 'pickup'>('dropoff');
   const [serviceType, setServiceType] = useState<'regular' | 'express'>('regular');
+  const [taxEnabled, setTaxEnabled] = useState(false);
+  const [defaultTaxRate, setDefaultTaxRate] = useState(0);
+  const [discountEnabled, setDiscountEnabled] = useState(false);
 
   const resetForm = () => {
     setCustomerName('');
@@ -63,13 +72,29 @@ export default function POSScreen() {
   };
 
   useFocusEffect(useCallback(() => {
-    api.get('/services?limit=200').then(({ data }) => {
-      setServices(data.data || []);
-    }).catch(() => {});
+    (async () => {
+      try {
+        const [svcRes, setRes] = await Promise.all([
+          api.get('/services?limit=200'),
+          api.get('/settings'),
+        ]);
+        const svcData = svcRes.data.data || [];
+        setServices(svcData);
+        svcData.forEach((s: any) => dbServices.upsert(s));
+
+        const s = setRes.data.data || {};
+        setTaxEnabled(s.tax_enabled || false);
+        setDefaultTaxRate(s.default_tax_rate || 0);
+        setDiscountEnabled(s.discount_enabled || false);
+      } catch {
+        const local = await dbServices.getAll();
+        setServices(local);
+      }
+    })();
   }, []));
 
   const addRow = () => {
-    setItems([...items, { name: '', quantity: '1', unit: 'kg', unit_price: '' }]);
+    setItems([...items, { name: '', quantity: '1', unit: 'kg', unit_price: '', discount_percent: 0 }]);
   };
 
   const updateRow = (index: number, field: keyof ManualService, value: string) => {
@@ -84,7 +109,7 @@ export default function POSScreen() {
     if (pickerTarget !== null) {
       const updated = items.map((s, i) =>
         i === pickerTarget
-          ? { ...s, name: svc.name, unit: svc.unit, unit_price: svc.base_price.toString() }
+          ? { ...s, name: svc.name, unit: svc.unit, unit_price: svc.base_price.toString(), discount_percent: svc.discount_percent || 0 }
           : s
       );
       setItems(updated);
@@ -93,12 +118,37 @@ export default function POSScreen() {
     setShowServicePicker(false);
   };
 
-  const calculateTotal = () => {
+  const calculateSubtotal = () => {
     return items.reduce((sum, s) => {
       const qty = parseFloat(s.quantity) || 0;
       const price = parseFloat(s.unit_price) || 0;
       return sum + qty * price;
     }, 0);
+  };
+
+  const calculateDiscount = () => {
+    if (!discountEnabled) return 0;
+    return items.reduce((sum, s) => {
+      const qty = parseFloat(s.quantity) || 0;
+      const price = parseFloat(s.unit_price) || 0;
+      const pct = s.discount_percent || 0;
+      return sum + qty * price * (pct / 100);
+    }, 0);
+  };
+
+  const getTax = () => {
+    if (!taxEnabled) return 0;
+    const subtotal = calculateSubtotal();
+    const discount = calculateDiscount();
+    const net = subtotal - discount;
+    return net * (defaultTaxRate / 100);
+  };
+
+  const calculateTotal = () => {
+    const subtotal = calculateSubtotal();
+    const discount = calculateDiscount();
+    const tax = getTax();
+    return Math.max(0, subtotal - discount + tax);
   };
 
   const handleSubmit = async () => {
@@ -119,18 +169,7 @@ export default function POSScreen() {
 
     setLoading(true);
     try {
-      let customerId = '';
-      try {
-        const searchRes = await api.get(`/customers/search/phone?phone=${encodeURIComponent(customerPhone)}`);
-        if (searchRes.data.data) {
-          customerId = searchRes.data.data.id;
-        }
-      } catch {}
-
-      if (!customerId) {
-        const createRes = await api.post('/customers', { name: customerName, phone: customerPhone, address: customerAddress });
-        customerId = createRes.data.data.id;
-      }
+      const orderId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
 
       const orderItems = validItems.map((s) => ({
         service_name: s.name,
@@ -141,8 +180,56 @@ export default function POSScreen() {
         notes: '',
       }));
 
-      await api.post('/orders', { customer_id: customerId, order_type: orderType, service_type: serviceType, items: orderItems, notes });
-      Toast.show({ type: 'success', text1: 'Berhasil', text2: 'Pesanan berhasil dibuat' });
+      const subtotal = orderItems.reduce((sum, i) => sum + i.subtotal, 0);
+      const discountVal = calculateDiscount();
+      const taxVal = getTax();
+      const grandTotal = Math.max(0, subtotal - discountVal + taxVal);
+
+      const orderPayload = {
+        customer_id: orderId,
+        order_type: orderType,
+        service_type: serviceType,
+        items: orderItems,
+        discount_amount: discountVal,
+        tax_amount: taxVal,
+        notes,
+      };
+
+      const localOrder = {
+        id: orderId,
+        tenant_id: tenantId || '',
+        company_id: companyId || '',
+        customer_id: orderId,
+        invoice_number: `OFFLINE-${orderId.slice(0, 8).toUpperCase()}`,
+        status: 'pending',
+        order_type: orderType,
+        service_type: serviceType,
+        subtotal,
+        discount_amount: discountVal,
+        tax_amount: taxVal,
+        grand_total: grandTotal,
+        payment_status: 'unpaid',
+        items: orderItems,
+        notes,
+        created_at: new Date().toISOString(),
+      };
+
+      const orderPayloadWithMeta = {
+        ...orderPayload,
+        tenant_id: tenantId || '',
+        company_id: companyId || '',
+      };
+
+      try {
+        await api.post('/orders', orderPayload);
+        dbOrders.upsert(localOrder, 'synced');
+        Toast.show({ type: 'success', text1: 'Berhasil', text2: 'Pesanan berhasil dibuat' });
+      } catch {
+        dbOrders.upsert(localOrder, 'pending');
+        dbSyncQueue.add('orders', 'create', orderId, orderPayloadWithMeta);
+        Toast.show({ type: 'success', text1: 'Disimpan Offline', text2: 'Pesanan akan tersimpan dan tersinkron nanti' });
+      }
+
       clearCurrentOrder();
       resetForm();
       router.push('/(app)/orders');
@@ -152,6 +239,29 @@ export default function POSScreen() {
       setLoading(false);
     }
   };
+
+  const styles = React.useMemo(() => StyleSheet.create({
+    scrollView: { flex: 1 },
+    content: { padding: spacing.md, paddingBottom: 100 },
+    header: { marginBottom: spacing.md },
+    section: { marginBottom: spacing.md },
+    sectionTitle: { marginBottom: spacing.sm },
+    sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    serviceRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md, alignItems: 'flex-start' },
+    removeBtn: { paddingTop: spacing.lg + spacing.xs },
+    serviceFields: { flex: 1 },
+    inlineFields: { flexDirection: 'row', gap: spacing.sm },
+    totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+    typeRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
+    typeBtn: { flex: 1, padding: spacing.md, borderRadius: borderRadius.md, backgroundColor: colors.gray100, alignItems: 'center' },
+    typeBtnActive: { backgroundColor: colors.primary },
+    submitBtn: { marginTop: spacing.md },
+    divider: { height: 1, backgroundColor: colors.border, marginVertical: spacing.sm },
+    pickerOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
+    pickerSheet: { backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: spacing.lg, maxHeight: '60%' },
+    pickerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
+    pickerItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  }), [colors]);
 
   return (
     <ThemedView>
@@ -201,6 +311,25 @@ export default function POSScreen() {
 
           {items.filter((s) => s.name.trim() && parseFloat(s.unit_price) > 0).length > 0 && (
             <Card style={styles.section}>
+              <ThemedText variant="heading" style={styles.sectionTitle}>Ringkasan Biaya</ThemedText>
+              <View style={styles.divider} />
+              <View style={styles.totalRow}>
+                <ThemedText variant="body" color={colors.textSecondary}>Subtotal</ThemedText>
+                <ThemedText variant="body">Rp {calculateSubtotal().toLocaleString()}</ThemedText>
+              </View>
+              {calculateDiscount() > 0 && (
+                <View style={styles.totalRow}>
+                  <ThemedText variant="body" color={colors.danger}>Diskon Layanan</ThemedText>
+                  <ThemedText variant="body" color={colors.danger}>- Rp {calculateDiscount().toLocaleString()}</ThemedText>
+                </View>
+              )}
+              {getTax() > 0 && (
+                <View style={styles.totalRow}>
+                  <ThemedText variant="body" color={colors.textSecondary}>Pajak ({defaultTaxRate}%)</ThemedText>
+                  <ThemedText variant="body">+ Rp {getTax().toLocaleString()}</ThemedText>
+                </View>
+              )}
+              <View style={styles.divider} />
               <View style={styles.totalRow}>
                 <ThemedText variant="heading">Total</ThemedText>
                 <ThemedText variant="heading" color={colors.primary}>Rp {calculateTotal().toLocaleString()}</ThemedText>
@@ -248,7 +377,7 @@ export default function POSScreen() {
             <ScrollView style={{ maxHeight: 500 }}>
               {services.filter((s) => s.base_price > 0).map((svc) => (
                 <TouchableOpacity key={svc.id} style={styles.pickerItem} onPress={() => {
-                  const newItems = [...items, { name: svc.name, quantity: '1', unit: svc.unit, unit_price: svc.base_price.toString() }];
+                  const newItems = [...items, { name: svc.name, quantity: '1', unit: svc.unit, unit_price: svc.base_price.toString(), discount_percent: svc.discount_percent || 0 }];
                   setItems(newItems);
                   setShowServicePicker(false);
                 }}>
@@ -272,24 +401,4 @@ export default function POSScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  scrollView: { flex: 1 },
-  content: { padding: spacing.md, paddingBottom: 100 },
-  header: { marginBottom: spacing.md },
-  section: { marginBottom: spacing.md },
-  sectionTitle: { marginBottom: spacing.sm },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  serviceRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.md, alignItems: 'flex-start' },
-  removeBtn: { paddingTop: spacing.lg + spacing.xs },
-  serviceFields: { flex: 1 },
-  inlineFields: { flexDirection: 'row', gap: spacing.sm },
-  totalRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
-  typeRow: { flexDirection: 'row', gap: spacing.sm, marginBottom: spacing.sm },
-  typeBtn: { flex: 1, padding: spacing.md, borderRadius: borderRadius.md, backgroundColor: colors.gray100, alignItems: 'center' },
-  typeBtnActive: { backgroundColor: colors.primary },
-  submitBtn: { marginTop: spacing.md },
-  pickerOverlay: { position: 'absolute', top: 0, bottom: 0, left: 0, right: 0, backgroundColor: 'rgba(0,0,0,0.5)', justifyContent: 'flex-end' },
-  pickerSheet: { backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: spacing.lg, maxHeight: '60%' },
-  pickerHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
-  pickerItem: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-});
+

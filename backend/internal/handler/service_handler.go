@@ -97,3 +97,15 @@ func (h *ServiceHandler) UpdateService(c *gin.Context) {
 
 	response.OK(c, "service updated", resp)
 }
+
+func (h *ServiceHandler) DeleteService(c *gin.Context) {
+	id := c.Param("id")
+
+	statusCode, err := h.serviceUsecase.DeleteService(c, id)
+	if err != nil {
+		response.Error(c, statusCode, err.Error())
+		return
+	}
+
+	response.OK(c, "service deleted", nil)
+}

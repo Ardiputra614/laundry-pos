@@ -1,21 +1,36 @@
-import React, { useState } from 'react';
-import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, StyleSheet, KeyboardAvoidingView, Platform, ScrollView, Switch } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
 import { Input } from '@/components/Input';
 import { Button } from '@/components/Button';
-import { colors, spacing } from '@/lib/theme';
+import { useColors, spacing } from '@/lib/theme';
 import { Ionicons } from '@expo/vector-icons';
+import * as SecureStore from 'expo-secure-store';
 import Toast from 'react-native-toast-message';
 
+const SAVED_EMAIL_KEY = 'saved_email';
+const SAVED_PASSWORD_KEY = 'saved_password';
+
 export default function LoginScreen() {
+  const colors = useColors();
   const { login } = useAuth();
   const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [remember, setRemember] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    (async () => {
+      const savedEmail = await SecureStore.getItemAsync(SAVED_EMAIL_KEY);
+      const savedPassword = await SecureStore.getItemAsync(SAVED_PASSWORD_KEY);
+      if (savedEmail) setEmail(savedEmail);
+      if (savedPassword) { setPassword(savedPassword); setRemember(true); }
+    })();
+  }, []);
 
   const handleLogin = async () => {
     if (!email || !password) {
@@ -25,6 +40,13 @@ export default function LoginScreen() {
 
     setLoading(true);
     try {
+      if (remember) {
+        await SecureStore.setItemAsync(SAVED_EMAIL_KEY, email);
+        await SecureStore.setItemAsync(SAVED_PASSWORD_KEY, password);
+      } else {
+        await SecureStore.deleteItemAsync(SAVED_EMAIL_KEY);
+        await SecureStore.deleteItemAsync(SAVED_PASSWORD_KEY);
+      }
       await login(email, password);
       router.replace('/(app)');
     } catch (error: any) {
@@ -52,6 +74,17 @@ export default function LoginScreen() {
           <View style={styles.form}>
             <Input label="Email" placeholder="Masukkan email" value={email} onChangeText={setEmail} keyboardType="email-address" autoCapitalize="none" icon="mail-outline" />
             <Input label="Password" placeholder="Masukkan password" value={password} onChangeText={setPassword} secureTextEntry icon="lock-closed-outline" />
+
+            <View style={styles.rememberRow}>
+              <Switch
+                value={remember}
+                onValueChange={setRemember}
+                trackColor={{ false: colors.gray300, true: colors.primaryLight }}
+                thumbColor={remember ? colors.primary : colors.gray400}
+              />
+              <ThemedText variant="body" color={colors.textSecondary}>Ingat saya</ThemedText>
+            </View>
+
             <Button title="Masuk" onPress={handleLogin} loading={loading} size="lg" style={styles.button} />
           </View>
 
@@ -86,6 +119,12 @@ const styles = StyleSheet.create({
     width: '100%',
   },
   button: {
+    marginTop: spacing.sm,
+  },
+  rememberRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.sm,
     marginTop: spacing.sm,
   },
   footer: {

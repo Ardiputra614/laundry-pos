@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, TextInput, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import { colors, spacing, borderRadius, fontSize } from '@/lib/theme';
+import { useColors, spacing, borderRadius, fontSize } from '@/lib/theme';
 import { Ionicons } from '@expo/vector-icons';
 
 interface InputProps {
@@ -18,8 +18,10 @@ interface InputProps {
 }
 
 export function Input({ label, placeholder, value, onChangeText, error, secureTextEntry, icon, keyboardType, autoCapitalize, multiline, numberOfLines }: InputProps) {
+  const colors = useColors();
   const [isFocused, setIsFocused] = useState(false);
   const [showPassword, setShowPassword] = useState(false);
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
 
   return (
     <View style={styles.container}>
@@ -66,50 +68,52 @@ export function Input({ label, placeholder, value, onChangeText, error, secureTe
   );
 }
 
-const styles = StyleSheet.create({
-  container: {
-    marginBottom: spacing.md,
-  },
-  label: {
-    fontSize: fontSize.sm,
-    fontWeight: '600',
-    color: colors.text,
-    marginBottom: spacing.xs,
-  },
-  inputContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.white,
-    borderWidth: 1.5,
-    borderColor: colors.border,
-    borderRadius: borderRadius.md,
-    paddingHorizontal: spacing.md,
-  },
-  inputFocused: {
-    borderColor: colors.primary,
-  },
-  inputError: {
-    borderColor: colors.danger,
-  },
-  icon: {
-    marginRight: spacing.sm,
-  },
-  input: {
-    flex: 1,
-    fontSize: fontSize.md,
-    color: colors.text,
-    paddingVertical: spacing.md - 2,
-  },
-  multiline: {
-    minHeight: 80,
-    textAlignVertical: 'top',
-  },
-  eyeIcon: {
-    padding: spacing.xs,
-  },
-  errorText: {
-    fontSize: fontSize.xs,
-    color: colors.danger,
-    marginTop: spacing.xs,
-  },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    container: {
+      marginBottom: spacing.md,
+    },
+    label: {
+      fontSize: fontSize.sm,
+      fontWeight: '600',
+      color: colors.text,
+      marginBottom: spacing.xs,
+    },
+    inputContainer: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      backgroundColor: colors.white,
+      borderWidth: 1.5,
+      borderColor: colors.border,
+      borderRadius: borderRadius.md,
+      paddingHorizontal: spacing.md,
+    },
+    inputFocused: {
+      borderColor: colors.primary,
+    },
+    inputError: {
+      borderColor: colors.danger,
+    },
+    icon: {
+      marginRight: spacing.sm,
+    },
+    input: {
+      flex: 1,
+      fontSize: fontSize.md,
+      color: colors.text,
+      paddingVertical: spacing.md - 2,
+    },
+    multiline: {
+      minHeight: 80,
+      textAlignVertical: 'top',
+    },
+    eyeIcon: {
+      padding: spacing.xs,
+    },
+    errorText: {
+      fontSize: fontSize.xs,
+      color: colors.danger,
+      marginTop: spacing.xs,
+    },
+  });
+}

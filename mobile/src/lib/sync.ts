@@ -1,9 +1,10 @@
 import * as Network from 'expo-network';
 import { api } from './api';
-import { dbSyncQueue, dbOrders, dbCustomers } from './database';
+import { dbSyncQueue, dbOrders, dbServices, dbCustomers, dbCategories } from './database';
+import { useAuthStore } from '@/stores/authStore';
 
 let isSyncing = false;
-let syncInterval: NodeJS.Timeout | null = null;
+let syncInterval: ReturnType<typeof setInterval> | null = null;
 
 export async function startSyncEngine(intervalMs = 30000) {
   await syncNow();
@@ -38,8 +39,10 @@ export async function syncNow() {
           case 'orders':
             await api.post('/orders', data);
             break;
+          case 'services':
+            await api.post('/services', data);
+            break;
           case 'customers':
-            await api.post('/customers', data);
             break;
         }
         dbSyncQueue.markSynced(item.id);
@@ -50,22 +53,39 @@ export async function syncNow() {
       }
     }
 
+    const { tenantId, companyId } = useAuthStore.getState();
+
     try {
       const { data: ordersData } = await api.get('/orders?limit=50');
       if (ordersData.data) {
-        ordersData.data.forEach(dbOrders.upsert);
+        ordersData.data.forEach((o: any) =>
+          dbOrders.upsert({ ...o, tenant_id: o.tenant_id || tenantId, company_id: o.company_id || companyId }, 'synced')
+        );
       }
     } catch (e) {
       console.log('[Sync] Failed to pull orders');
     }
 
     try {
-      const { data: customersData } = await api.get('/customers?limit=50');
-      if (customersData.data) {
-        customersData.data.forEach(dbCustomers.upsert);
+      const { data: servicesData } = await api.get('/services?limit=200');
+      if (servicesData.data) {
+        dbServices.clear();
+        servicesData.data.forEach((s: any) =>
+          dbServices.upsert({ ...s, tenant_id: s.tenant_id || tenantId, company_id: s.company_id || companyId })
+        );
       }
     } catch (e) {
-      console.log('[Sync] Failed to pull customers');
+      console.log('[Sync] Failed to pull services');
+    }
+
+    try {
+      const { data: catData } = await api.get('/services/categories');
+      if (catData.data) {
+        dbCategories.clear();
+        catData.data.forEach(dbCategories.upsert);
+      }
+    } catch (e) {
+      console.log('[Sync] Failed to pull categories');
     }
 
     console.log('[Sync] Synchronization complete');

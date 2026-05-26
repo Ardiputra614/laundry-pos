@@ -1,6 +1,6 @@
 import React from 'react';
 import { TouchableOpacity, Text, StyleSheet, ActivityIndicator, ViewStyle } from 'react-native';
-import { colors, spacing, borderRadius, fontSize } from '@/lib/theme';
+import { useColors, spacing, borderRadius, fontSize } from '@/lib/theme';
 
 interface ButtonProps {
   title: string;
@@ -13,7 +13,9 @@ interface ButtonProps {
 }
 
 export function Button({ title, onPress, variant = 'primary', size = 'md', loading, disabled, style }: ButtonProps) {
+  const colors = useColors();
   const isDisabled = disabled || loading;
+  const styles = React.useMemo(() => createStyles(colors), [colors]);
 
   return (
     <TouchableOpacity
@@ -44,70 +46,72 @@ export function Button({ title, onPress, variant = 'primary', size = 'md', loadi
   );
 }
 
-const styles = StyleSheet.create({
-  base: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    borderRadius: borderRadius.md,
-    paddingVertical: spacing.md - 4,
-    paddingHorizontal: spacing.lg,
-  },
-  primary: {
-    backgroundColor: colors.primary,
-  },
-  secondary: {
-    backgroundColor: colors.gray100,
-  },
-  danger: {
-    backgroundColor: colors.danger,
-  },
-  outline: {
-    backgroundColor: 'transparent',
-    borderWidth: 1.5,
-    borderColor: colors.primary,
-  },
-  ghost: {
-    backgroundColor: 'transparent',
-  },
-  size_sm: {
-    paddingVertical: spacing.sm - 2,
-    paddingHorizontal: spacing.md,
-  },
-  size_md: {
-    paddingVertical: spacing.md - 4,
-    paddingHorizontal: spacing.lg,
-  },
-  size_lg: {
-    paddingVertical: spacing.md + 2,
-    paddingHorizontal: spacing.xl,
-  },
-  disabled: {
-    opacity: 0.5,
-  },
-  text: {
-    fontSize: fontSize.md,
-    fontWeight: '600',
-  },
-  text_primary: {
-    color: colors.white,
-  },
-  text_secondary: {
-    color: colors.text,
-  },
-  text_danger: {
-    color: colors.white,
-  },
-  text_outline: {
-    color: colors.primary,
-  },
-  text_ghost: {
-    color: colors.primary,
-  },
-  textSm: {
-    fontSize: fontSize.sm,
-  },
-  textLg: {
-    fontSize: fontSize.lg,
-  },
-});
+function createStyles(colors: ReturnType<typeof useColors>) {
+  return StyleSheet.create({
+    base: {
+      flexDirection: 'row',
+      alignItems: 'center',
+      justifyContent: 'center',
+      borderRadius: borderRadius.md,
+      paddingVertical: spacing.md - 4,
+      paddingHorizontal: spacing.lg,
+    },
+    primary: {
+      backgroundColor: colors.primary,
+    },
+    secondary: {
+      backgroundColor: colors.gray100,
+    },
+    danger: {
+      backgroundColor: colors.danger,
+    },
+    outline: {
+      backgroundColor: 'transparent',
+      borderWidth: 1.5,
+      borderColor: colors.primary,
+    },
+    ghost: {
+      backgroundColor: 'transparent',
+    },
+    size_sm: {
+      paddingVertical: spacing.sm - 2,
+      paddingHorizontal: spacing.md,
+    },
+    size_md: {
+      paddingVertical: spacing.md - 4,
+      paddingHorizontal: spacing.lg,
+    },
+    size_lg: {
+      paddingVertical: spacing.md + 2,
+      paddingHorizontal: spacing.xl,
+    },
+    disabled: {
+      opacity: 0.5,
+    },
+    text: {
+      fontSize: fontSize.md,
+      fontWeight: '600',
+    },
+    text_primary: {
+      color: colors.white,
+    },
+    text_secondary: {
+      color: colors.text,
+    },
+    text_danger: {
+      color: colors.white,
+    },
+    text_outline: {
+      color: colors.primary,
+    },
+    text_ghost: {
+      color: colors.primary,
+    },
+    textSm: {
+      fontSize: fontSize.sm,
+    },
+    textLg: {
+      fontSize: fontSize.lg,
+    },
+  });
+}

@@ -1,7 +1,9 @@
 import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
-import { colors, borderRadius, fontSize, spacing } from '@/lib/theme';
+import { useColors, borderRadius, fontSize, spacing } from '@/lib/theme';
 import { OrderStatus, PaymentStatus } from '@/types';
+import { useI18nStore } from '@/stores/i18nStore';
+import { tStatus } from '@/lib/i18n';
 
 type StatusType = OrderStatus | PaymentStatus | string;
 
@@ -17,11 +19,15 @@ const statusColors: Record<string, { bg: string; text: string }> = {
   ironing: { bg: '#F3E8FF', text: '#9333EA' },
   packing: { bg: '#D1FAE5', text: '#059669' },
   finished: { bg: '#D1FAE5', text: '#059669' },
+  ready: { bg: '#D1FAE5', text: '#059669' },
   delivered: { bg: '#DBEAFE', text: '#2563EB' },
+  completed: { bg: '#D1FAE5', text: '#059669' },
+  processing: { bg: '#DBEAFE', text: '#2563EB' },
   cancelled: { bg: '#FEE2E2', text: '#DC2626' },
   unpaid: { bg: '#FEF3C7', text: '#D97706' },
   paid: { bg: '#D1FAE5', text: '#059669' },
-  refund: { bg: '#FEE2E2', text: '#DC2626' },
+  partial: { bg: '#FEF3C7', text: '#D97706' },
+  refunded: { bg: '#FEE2E2', text: '#DC2626' },
   active: { bg: '#D1FAE5', text: '#059669' },
   inactive: { bg: '#FEE2E2', text: '#DC2626' },
   suspended: { bg: '#FEE2E2', text: '#DC2626' },
@@ -29,13 +35,15 @@ const statusColors: Record<string, { bg: string; text: string }> = {
 };
 
 export function StatusBadge({ status, type = 'general' }: StatusBadgeProps) {
+  const colors = useColors();
+  const language = useI18nStore((s) => s.language);
   const normalized = status.toLowerCase();
   const colors_map = statusColors[normalized] || { bg: colors.gray100, text: colors.gray600 };
 
   return (
     <View style={[styles.badge, { backgroundColor: colors_map.bg }]}>
       <Text style={[styles.text, { color: colors_map.text }]}>
-        {status}
+        {tStatus(status, language)}
       </Text>
     </View>
   );

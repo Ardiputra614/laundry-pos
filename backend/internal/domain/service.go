@@ -36,6 +36,7 @@ type Service struct {
 	PriceType      PriceType  `gorm:"type:varchar(20);not null;default:'weight'"`
 	Unit           string     `gorm:"type:varchar(20);not null;default:'kg'"`
 	BasePrice      float64    `gorm:"type:decimal(15,2);not null;default:0"`
+	DiscountPercent float64   `gorm:"type:decimal(5,2);not null;default:0"`
 	MinQuantity    float64    `gorm:"type:decimal(10,2);not null;default:1"`
 	EstimatedHours int        `gorm:"not null;default:24"`
 	IsActive       bool       `gorm:"not null;default:true"`

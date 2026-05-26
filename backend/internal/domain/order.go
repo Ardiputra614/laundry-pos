@@ -113,6 +113,7 @@ type OrderItemRepository interface {
 	Create(item *OrderItem) error
 	CreateBatch(items []OrderItem) error
 	FindByOrderID(orderID string) ([]OrderItem, error)
+	FindByOrderIDs(orderIDs []string) ([]OrderItem, error)
 	DeleteByOrderID(orderID string) error
 }
 

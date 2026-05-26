@@ -4,15 +4,27 @@ import { useRouter } from 'expo-router';
 import { CameraView, useCameraPermissions } from 'expo-camera';
 import { ThemedView } from '@/components/ThemedView';
 import { ThemedText } from '@/components/ThemedText';
-import { colors, spacing } from '@/lib/theme';
+import { useColors, spacing } from '@/lib/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/lib/api';
 import Toast from 'react-native-toast-message';
 
 export default function ScanScreen() {
+  const colors = useColors();
   const router = useRouter();
   const [permission, requestPermission] = useCameraPermissions();
   const [scanned, setScanned] = useState(false);
+
+  const styles = React.useMemo(() => StyleSheet.create({
+    center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.lg },
+    permitBtn: { backgroundColor: colors.primary, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderRadius: 8, marginTop: spacing.md },
+    camera: { flex: 1 },
+    overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'space-between', padding: spacing.md },
+    closeBtn: { alignSelf: 'flex-start', padding: spacing.sm, marginTop: spacing.xl },
+    scanArea: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    scanFrame: { width: 250, height: 250, borderWidth: 2, borderColor: colors.white, borderRadius: 16, backgroundColor: 'transparent' },
+    scanAgain: { alignSelf: 'center', padding: spacing.md, marginBottom: spacing.xxl },
+  }), [colors]);
 
   if (!permission) {
     return (
@@ -86,13 +98,4 @@ export default function ScanScreen() {
   );
 }
 
-const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: spacing.lg },
-  permitBtn: { backgroundColor: colors.primary, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderRadius: 8, marginTop: spacing.md },
-  camera: { flex: 1 },
-  overlay: { flex: 1, backgroundColor: 'rgba(0,0,0,0.3)', justifyContent: 'space-between', padding: spacing.md },
-  closeBtn: { alignSelf: 'flex-start', padding: spacing.sm, marginTop: spacing.xl },
-  scanArea: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  scanFrame: { width: 250, height: 250, borderWidth: 2, borderColor: colors.white, borderRadius: 16, backgroundColor: 'transparent' },
-  scanAgain: { alignSelf: 'center', padding: spacing.md, marginBottom: spacing.xxl },
-});
+

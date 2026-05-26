@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, StyleSheet } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { colors, spacing } from '@/lib/theme';
+import { useColors, spacing } from '@/lib/theme';
 import { ThemedText } from './ThemedText';
 import { Button } from './Button';
 
@@ -14,6 +14,7 @@ interface EmptyStateProps {
 }
 
 export function EmptyState({ icon = 'file-tray-outline', title, description, actionLabel, onAction }: EmptyStateProps) {
+  const colors = useColors();
   return (
     <View style={styles.container}>
       <Ionicons name={icon} size={64} color={colors.gray300} />

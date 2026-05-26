@@ -7,18 +7,22 @@ import { Card } from '@/components/Card';
 import { StatusBadge } from '@/components/StatusBadge';
 import { Button } from '@/components/Button';
 import { LoadingScreen } from '@/components/LoadingScreen';
-import { colors, spacing, borderRadius, fontSize } from '@/lib/theme';
+import { useColors, spacing, borderRadius, fontSize } from '@/lib/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/lib/api';
+import { dbOrders } from '@/lib/database';
 import { format } from 'date-fns';
 import Toast from 'react-native-toast-message';
 import * as Print from 'expo-print';
 import { scanPrinters, connectPrinter, disconnectPrinter, printESC, buildReceipt } from '@/lib/blePrinter';
 import { getSavedPrinter, savePrinter, SavedPrinter } from '@/lib/printerStore';
+import { useI18nStore } from '@/stores/i18nStore';
+import { t, tStatus, Language } from '@/lib/i18n';
 
 const ORDER_STATUSES = ['pending', 'washing', 'drying', 'ironing', 'packing', 'finished', 'delivered'];
 
 export default function OrderDetailScreen() {
+  const colors = useColors();
   const { id } = useLocalSearchParams<{ id: string }>();
   const router = useRouter();
   const [order, setOrder] = useState<any>(null);
@@ -30,6 +34,42 @@ export default function OrderDetailScreen() {
   const [devices, setDevices] = useState<any[]>([]);
   const [bleBusy, setBleBusy] = useState(false);
   const [savedPrinter, setSavedPrinter] = useState<SavedPrinter | null>(null);
+  const [showStatusPicker, setShowStatusPicker] = useState(false);
+  const language = useI18nStore((s) => s.language);
+
+  const styles = React.useMemo(() => StyleSheet.create({
+    center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+    content: { padding: spacing.md, paddingBottom: spacing.xxl },
+    header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.lg },
+    section: { marginBottom: spacing.md },
+    sectionTitle: { marginBottom: spacing.sm },
+    timeline: { paddingLeft: spacing.xs },
+    timelineItem: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: -4 },
+    timelineDot: { alignItems: 'center', width: 24, marginRight: spacing.sm },
+    dot: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.gray200, marginTop: 4 },
+    dotCompleted: { backgroundColor: colors.primary },
+    dotCurrent: { backgroundColor: colors.primary, width: 16, height: 16, borderRadius: 8, marginTop: 2 },
+    line: { width: 2, flex: 1, backgroundColor: colors.gray200, marginVertical: 2, minHeight: 24 },
+    lineCompleted: { backgroundColor: colors.primary },
+    timelineLabel: { paddingVertical: spacing.sm },
+    itemRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.sm },
+    itemBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
+    itemInfo: { flex: 1 },
+    paymentRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.xs },
+    totalRow: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm, marginTop: spacing.xs },
+    actions: { marginTop: spacing.md, marginBottom: spacing.xl },
+    bleOv: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
+    bleSheet: { backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: spacing.lg },
+    bleHd: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
+    bleDev: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+    miniBtn: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+    statusSheet: { backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: spacing.lg, maxHeight: '60%' },
+    statusItem: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, gap: spacing.sm },
+    statusItemActive: { backgroundColor: colors.primaryLight, borderRadius: borderRadius.md, paddingHorizontal: spacing.sm },
+    statusDotWrapper: { width: 24, alignItems: 'center' },
+    statusDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: colors.gray300 },
+    statusDotActive: { backgroundColor: colors.primary, width: 12, height: 12, borderRadius: 6 },
+  }), [colors]);
 
   useEffect(() => { loadSaved(); }, []);
 
@@ -43,7 +83,12 @@ export default function OrderDetailScreen() {
       const { data } = await api.get(`/orders/${id}`);
       setOrder(data.data);
     } catch {
-      Toast.show({ type: 'error', text1: 'Error', text2: 'Gagal memuat pesanan' });
+      const local = await dbOrders.getById(id);
+      if (local) {
+        setOrder(local);
+      } else {
+        Toast.show({ type: 'error', text1: 'Error', text2: 'Gagal memuat pesanan' });
+      }
     } finally {
       setLoading(false);
     }
@@ -227,7 +272,7 @@ export default function OrderDetailScreen() {
         </View>
 
         <Card style={styles.section}>
-          <ThemedText variant="heading" style={styles.sectionTitle}>Status Timeline</ThemedText>
+          <ThemedText variant="heading" style={styles.sectionTitle}>{t('order.status_timeline', language)}</ThemedText>
           <View style={styles.timeline}>
             {ORDER_STATUSES.map((status, index) => {
               const isCompleted = index <= currentStatusIndex;
@@ -246,7 +291,7 @@ export default function OrderDetailScreen() {
                     color={isCompleted ? colors.text : colors.gray400}
                     style={styles.timelineLabel}
                   >
-                    {status.charAt(0).toUpperCase() + status.slice(1)}
+                    {tStatus(status, language)}
                   </ThemedText>
                 </View>
               );
@@ -270,43 +315,43 @@ export default function OrderDetailScreen() {
         )}
 
         <Card style={styles.section}>
-          <ThemedText variant="heading" style={styles.sectionTitle}>Pembayaran</ThemedText>
+          <ThemedText variant="heading" style={styles.sectionTitle}>{t('order.payment', language)}</ThemedText>
           <View style={styles.paymentRow}>
-            <ThemedText variant="body">Status</ThemedText>
+            <ThemedText variant="body">{t('order.status', language)}</ThemedText>
             <StatusBadge status={order.payment_status} type="payment" />
           </View>
           <View style={styles.paymentRow}>
-            <ThemedText variant="body">Subtotal</ThemedText>
+            <ThemedText variant="body">{t('order.subtotal', language)}</ThemedText>
             <ThemedText variant="body">Rp {order.subtotal?.toLocaleString()}</ThemedText>
           </View>
           {order.discount_amount > 0 && (
             <View style={styles.paymentRow}>
-              <ThemedText variant="body">Diskon</ThemedText>
+              <ThemedText variant="body">{t('order.discount', language)}</ThemedText>
               <ThemedText variant="body" color={colors.danger}>-Rp {order.discount_amount?.toLocaleString()}</ThemedText>
             </View>
           )}
           {order.tax_amount > 0 && (
             <View style={styles.paymentRow}>
-              <ThemedText variant="body">Pajak</ThemedText>
+              <ThemedText variant="body">{t('order.tax', language)}</ThemedText>
               <ThemedText variant="body">Rp {order.tax_amount?.toLocaleString()}</ThemedText>
             </View>
           )}
           <View style={[styles.paymentRow, styles.totalRow]}>
-            <ThemedText variant="heading">Total</ThemedText>
+            <ThemedText variant="heading">{t('order.total', language)}</ThemedText>
             <ThemedText variant="heading" color={colors.primary}>Rp {order.grand_total?.toLocaleString()}</ThemedText>
           </View>
           {order.paid_amount > 0 && (
             <View style={styles.paymentRow}>
-              <ThemedText variant="body">Dibayar</ThemedText>
+              <ThemedText variant="body">{t('order.paid', language)}</ThemedText>
               <ThemedText variant="body" color={colors.success}>Rp {order.paid_amount?.toLocaleString()}</ThemedText>
             </View>
           )}
         </Card>
 
         <Card style={styles.section}>
-          <ThemedText variant="heading" style={styles.sectionTitle}>Info Order</ThemedText>
-          <InfoRow label="Tipe" value={order.order_type === 'dropoff' ? 'Antar Sendiri' : 'Pickup'} />
-          <InfoRow label="Layanan" value={order.service_type === 'express' ? 'Ekspres' : 'Reguler'} />
+          <ThemedText variant="heading" style={styles.sectionTitle}>{t('order.info', language)}</ThemedText>
+          <InfoRow label={t('order.status', language)} value={order.order_type === 'dropoff' ? t('order.type_dropoff', language) : t('order.type_pickup', language)} />
+          <InfoRow label={t('order.info', language)} value={order.service_type === 'express' ? t('order.service_express', language) : t('order.service_regular', language)} />
           {order.total_weight > 0 && <InfoRow label="Berat" value={`${order.total_weight} kg`} />}
           <InfoRow label="Estimasi Selesai" value={order.estimated_done_at ? format(new Date(order.estimated_done_at), 'dd MMM yyyy HH:mm') : '-'} />
           <InfoRow label="Dibuat" value={order.created_at ? format(new Date(order.created_at), 'dd MMM yyyy HH:mm') : '-'} />
@@ -315,16 +360,14 @@ export default function OrderDetailScreen() {
         </Card>
 
         <View style={styles.actions}>
-          {currentStatusIndex < ORDER_STATUSES.length - 1 && (
-            <Button
-              title={`Ubah ke ${ORDER_STATUSES[currentStatusIndex + 1].charAt(0).toUpperCase() + ORDER_STATUSES[currentStatusIndex + 1].slice(1)}`}
-              onPress={() => handleStatusUpdate(ORDER_STATUSES[currentStatusIndex + 1])}
-              size="lg"
-            />
-          )}
+          <Button
+            title={t('order.change_status_to', language)}
+            onPress={() => setShowStatusPicker(true)}
+            size="lg"
+          />
           {isPaymentPending && (
             <Button
-              title="Tandai Dibayar"
+              title={t('order.mark_paid', language)}
               onPress={async () => {
                 try {
                   await api.post(`/orders/${id}/payment`, { amount: order.grand_total, payment_method: 'cash', payment_channel: 'cash' });
@@ -340,7 +383,7 @@ export default function OrderDetailScreen() {
             />
           )}
           <Button
-            title="Cetak Struk"
+            title={t('order.print_receipt', language)}
             onPress={handlePrint}
             variant="outline"
             size="lg"
@@ -348,7 +391,7 @@ export default function OrderDetailScreen() {
             loading={printing}
           />
           <Button
-            title="Cetak QR"
+            title={t('order.print_qr', language)}
             onPress={handlePrintQr}
             variant="outline"
             size="lg"
@@ -365,6 +408,56 @@ export default function OrderDetailScreen() {
           />
         </View>
       </ScrollView>
+
+      <Modal visible={showStatusPicker} animationType="slide" transparent>
+        <View style={styles.bleOv}>
+          <View style={styles.statusSheet}>
+            <View style={styles.bleHd}>
+              <ThemedText variant="heading">{t('order.change_status_to', language)}</ThemedText>
+              <TouchableOpacity onPress={() => setShowStatusPicker(false)}>
+                <Ionicons name="close" size={24} color={colors.text} />
+              </TouchableOpacity>
+            </View>
+            {ORDER_STATUSES.map((status) => (
+              <TouchableOpacity
+                key={status}
+                style={[styles.statusItem, order.status === status && styles.statusItemActive]}
+                onPress={() => {
+                  setShowStatusPicker(false);
+                  if (status === order.status) return;
+                  Alert.alert(
+                    t('order.change_status_to', language),
+                    `${tStatus(order.status, language)} → ${tStatus(status, language)}?`,
+                    [
+                      { text: t('general.cancel', language), style: 'cancel' },
+                      {
+                        text: t('general.save', language),
+                        onPress: () => handleStatusUpdate(status),
+                      },
+                    ]
+                  );
+                }}
+              >
+                <View style={styles.statusDotWrapper}>
+                  <View style={[styles.statusDot, order.status === status && styles.statusDotActive]} />
+                </View>
+                <View style={{ flex: 1 }}>
+                  <ThemedText
+                    variant="body"
+                    weight={order.status === status ? 'semibold' : 'regular'}
+                    color={order.status === status ? colors.primary : colors.text}
+                  >
+                    {tStatus(status, language)}
+                  </ThemedText>
+                </View>
+                {order.status === status && (
+                  <Ionicons name="checkmark-circle" size={20} color={colors.primary} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </View>
+      </Modal>
 
       <Modal visible={showBle} animationType="slide" transparent>
         <View style={styles.bleOv}>
@@ -424,39 +517,17 @@ export default function OrderDetailScreen() {
 }
 
 function InfoRow({ label, value }: { label: string; value: string }) {
+  const colors = useColors();
   return (
-    <View style={styles.infoRow}>
+    <View style={infoRowStyles.row}>
       <ThemedText variant="body" color={colors.textSecondary}>{label}</ThemedText>
       <ThemedText variant="body" weight="medium" style={{ textTransform: 'capitalize' }}>{value}</ThemedText>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
-  center: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  content: { padding: spacing.md, paddingBottom: spacing.xxl },
-  header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.lg },
-  section: { marginBottom: spacing.md },
-  sectionTitle: { marginBottom: spacing.sm },
-  timeline: { paddingLeft: spacing.xs },
-  timelineItem: { flexDirection: 'row', alignItems: 'flex-start', marginBottom: -4 },
-  timelineDot: { alignItems: 'center', width: 24, marginRight: spacing.sm },
-  dot: { width: 12, height: 12, borderRadius: 6, backgroundColor: colors.gray200, marginTop: 4 },
-  dotCompleted: { backgroundColor: colors.primary },
-  dotCurrent: { backgroundColor: colors.primary, width: 16, height: 16, borderRadius: 8, marginTop: 2 },
-  line: { width: 2, flex: 1, backgroundColor: colors.gray200, marginVertical: 2, minHeight: 24 },
-  lineCompleted: { backgroundColor: colors.primary },
-  timelineLabel: { paddingVertical: spacing.sm },
-  itemRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.sm },
-  itemBorder: { borderBottomWidth: 1, borderBottomColor: colors.border },
-  itemInfo: { flex: 1 },
-  paymentRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', paddingVertical: spacing.xs },
-  totalRow: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm, marginTop: spacing.xs },
-  infoRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing.xs + 2 },
-  actions: { marginTop: spacing.md, marginBottom: spacing.xl },
-  bleOv: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
-  bleSheet: { backgroundColor: colors.white, borderTopLeftRadius: 20, borderTopRightRadius: 20, padding: spacing.lg },
-  bleHd: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: spacing.md },
-  bleDev: { flexDirection: 'row', alignItems: 'center', paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
-  miniBtn: { width: 32, height: 32, borderRadius: 16, justifyContent: 'center', alignItems: 'center' },
+const infoRowStyles = StyleSheet.create({
+  row: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: spacing.xs + 2 },
 });
+
+
