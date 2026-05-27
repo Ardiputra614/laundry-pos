@@ -189,6 +189,9 @@ export default function ReportScreen() {
       >
         <View style={styles.header}>
           <ThemedText variant="title">{t('report.title', language)}</ThemedText>
+          <ThemedText variant="caption" color={colors.textSecondary} style={{ marginTop: spacing.xs }}>
+            Data laporan lengkap hanya tersedia saat online. Untuk data offline hanya 3 bulan terakhir.
+          </ThemedText>
         </View>
 
         <ScrollView

@@ -176,10 +176,7 @@ func (uc *PaymentUsecase) activateSubscriptionFromInvoice(invoiceNumber, payment
 	log.Printf("[Webhook] Found sub %s, status=%s, company_id=%s", sub.ID, sub.Status, sub.CompanyID)
 
 	sub.Status = "active"
-	periodEnd := now.AddDate(0, 1, 0)
-	if sub.BillingCycle == "yearly" {
-		periodEnd = now.AddDate(1, 0, 0)
-	}
+	periodEnd := calculatePeriodEnd(now, sub.BillingCycle)
 	sub.CurrentPeriodStart = &now
 	sub.CurrentPeriodEnd = &periodEnd
 	if err := uc.subRepo.Update(sub); err != nil {

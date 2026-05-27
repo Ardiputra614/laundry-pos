@@ -3,47 +3,56 @@ package dto
 import "github.com/ardiputra/laundry-pos/internal/domain"
 
 type CreatePlanRequest struct {
-	Name         string              `json:"name" binding:"required"`
-	Code         string              `json:"code" binding:"required"`
-	Description  string              `json:"description"`
-	PriceMonthly float64             `json:"price_monthly" binding:"min=0"`
-	PriceYearly  float64             `json:"price_yearly" binding:"min=0"`
-	MaxUsers     int                 `json:"max_users" binding:"min=1"`
-	MaxBranches  int                 `json:"max_branches" binding:"min=1"`
-	MaxOutlets   int                 `json:"max_outlets" binding:"min=1"`
-	Features     domain.PlanFeatures `json:"features"`
-	SortOrder    int                 `json:"sort_order"`
-	IsActive     *bool               `json:"is_active"`
+	Name            string              `json:"name" binding:"required"`
+	Code            string              `json:"code" binding:"required"`
+	Description     string              `json:"description"`
+	PriceMonthly    float64             `json:"price_monthly" binding:"min=0"`
+	PriceYearly     float64             `json:"price_yearly" binding:"min=0"`
+	PriceDaily      float64             `json:"price_daily" binding:"min=0"`
+	PriceHourly     float64             `json:"price_hourly" binding:"min=0"`
+	PricePerMinute  float64             `json:"price_per_minute" binding:"min=0"`
+	MaxUsers        int                 `json:"max_users" binding:"min=1"`
+	MaxBranches     int                 `json:"max_branches" binding:"min=1"`
+	MaxOutlets      int                 `json:"max_outlets" binding:"min=1"`
+	Features        domain.PlanFeatures `json:"features"`
+	SortOrder       int                 `json:"sort_order"`
+	IsActive        *bool               `json:"is_active"`
 }
 
 type UpdatePlanRequest struct {
-	Name         *string             `json:"name"`
-	Description  *string             `json:"description"`
-	PriceMonthly *float64            `json:"price_monthly" binding:"omitempty,min=0"`
-	PriceYearly  *float64            `json:"price_yearly" binding:"omitempty,min=0"`
-	MaxUsers     *int                `json:"max_users" binding:"omitempty,min=1"`
-	MaxBranches  *int                `json:"max_branches" binding:"omitempty,min=1"`
-	MaxOutlets   *int                `json:"max_outlets" binding:"omitempty,min=1"`
-	Features     *domain.PlanFeatures `json:"features"`
-	SortOrder    *int                `json:"sort_order"`
-	IsActive     *bool               `json:"is_active"`
+	Name           *string             `json:"name"`
+	Description    *string             `json:"description"`
+	PriceMonthly   *float64            `json:"price_monthly" binding:"omitempty,min=0"`
+	PriceYearly    *float64            `json:"price_yearly" binding:"omitempty,min=0"`
+	PriceDaily     *float64            `json:"price_daily" binding:"omitempty,min=0"`
+	PriceHourly    *float64            `json:"price_hourly" binding:"omitempty,min=0"`
+	PricePerMinute *float64            `json:"price_per_minute" binding:"omitempty,min=0"`
+	MaxUsers       *int                `json:"max_users" binding:"omitempty,min=1"`
+	MaxBranches    *int                `json:"max_branches" binding:"omitempty,min=1"`
+	MaxOutlets     *int                `json:"max_outlets" binding:"omitempty,min=1"`
+	Features       *domain.PlanFeatures `json:"features"`
+	SortOrder      *int                `json:"sort_order"`
+	IsActive       *bool               `json:"is_active"`
 }
 
 type PlanResponse struct {
-	ID           string              `json:"id"`
-	Name         string              `json:"name"`
-	Code         string              `json:"code"`
-	Description  string              `json:"description"`
-	PriceMonthly float64             `json:"price_monthly"`
-	PriceYearly  float64             `json:"price_yearly"`
-	MaxUsers     int                 `json:"max_users"`
-	MaxBranches  int                 `json:"max_branches"`
-	MaxOutlets   int                 `json:"max_outlets"`
-	Features     domain.PlanFeatures `json:"features"`
-	IsActive     bool                `json:"is_active"`
-	SortOrder    int                 `json:"sort_order"`
-	CreatedAt    string              `json:"created_at"`
-	UpdatedAt    string              `json:"updated_at"`
+	ID              string              `json:"id"`
+	Name            string              `json:"name"`
+	Code            string              `json:"code"`
+	Description     string              `json:"description"`
+	PriceMonthly    float64             `json:"price_monthly"`
+	PriceYearly     float64             `json:"price_yearly"`
+	PriceDaily      float64             `json:"price_daily"`
+	PriceHourly     float64             `json:"price_hourly"`
+	PricePerMinute  float64             `json:"price_per_minute"`
+	MaxUsers        int                 `json:"max_users"`
+	MaxBranches     int                 `json:"max_branches"`
+	MaxOutlets      int                 `json:"max_outlets"`
+	Features        domain.PlanFeatures `json:"features"`
+	IsActive        bool                `json:"is_active"`
+	SortOrder       int                 `json:"sort_order"`
+	CreatedAt       string              `json:"created_at"`
+	UpdatedAt       string              `json:"updated_at"`
 }
 
 type SubscriptionResponse struct {
@@ -87,12 +96,12 @@ type InvoiceResponse struct {
 
 type ChangePlanRequest struct {
 	PlanID       string `json:"plan_id" binding:"required"`
-	BillingCycle string `json:"billing_cycle" binding:"omitempty,oneof=monthly yearly"`
+	BillingCycle string `json:"billing_cycle" binding:"omitempty,oneof=monthly yearly daily hourly per_minute"`
 }
 
 type CreateSubscriptionPaymentRequest struct {
 	PlanID       string `json:"plan_id" binding:"required"`
-	BillingCycle string `json:"billing_cycle" binding:"omitempty,oneof=monthly yearly"`
+	BillingCycle string `json:"billing_cycle" binding:"omitempty,oneof=monthly yearly daily hourly per_minute"`
 }
 
 type SubscriptionPaymentResponse struct {

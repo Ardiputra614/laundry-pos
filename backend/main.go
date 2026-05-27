@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"github.com/ardiputra/laundry-pos/internal/config"
 	"github.com/ardiputra/laundry-pos/internal/domain"
@@ -115,6 +116,21 @@ func main() {
 	wsHub := ws.NewHub()
 	wsHandler := handler.NewWebSocketHandler(wsHub)
 	go wsHub.Run()
+
+	// Background task: check subscription expiry every hour
+	go func() {
+		ticker := time.NewTicker(1 * time.Hour)
+		defer ticker.Stop()
+		// Run once on startup
+		if err := subscriptionUsecase.HandleSubscriptionExpiry(); err != nil {
+			log.Printf("[Expiry] Error on startup: %v", err)
+		}
+		for range ticker.C {
+			if err := subscriptionUsecase.HandleSubscriptionExpiry(); err != nil {
+				log.Printf("[Expiry] Error: %v", err)
+			}
+		}
+	}()
 
 	r := gin.Default()
 

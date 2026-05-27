@@ -72,7 +72,7 @@ func Load() *Config {
 		RedisDB:       getEnvInt("REDIS_DB", 0),
 
 		JWTSecret:            getEnv("JWT_SECRET", "change-this-to-a-strong-secret-key"),
-		JWTAccessExpiration:  getDuration("JWT_ACCESS_EXPIRATION", 15*time.Minute),
+		JWTAccessExpiration:  getDuration("JWT_ACCESS_EXPIRATION", 24*time.Hour),
 		JWTRefreshExpiration: getDuration("JWT_REFRESH_EXPIRATION", 7*24*time.Hour),
 
 		S3Endpoint:  getEnv("S3_ENDPOINT", "http://localhost:9000"),

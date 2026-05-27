@@ -80,7 +80,7 @@ export default function POSScreen() {
         ]);
         const svcData = svcRes.data.data || [];
         setServices(svcData);
-        svcData.forEach((s: any) => dbServices.upsert(s));
+        svcData.forEach((s: any) => dbServices.upsert(s).catch(() => {}));
 
         const s = setRes.data.data || {};
         setTaxEnabled(s.tax_enabled || false);

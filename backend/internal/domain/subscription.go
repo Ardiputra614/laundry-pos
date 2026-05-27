@@ -18,8 +18,11 @@ type SubscriptionPlan struct {
 	Name         string    `gorm:"type:varchar(100);not null"`
 	Code         string    `gorm:"type:varchar(20);uniqueIndex;not null"`
 	Description  string    `gorm:"type:text"`
-	PriceMonthly float64   `gorm:"type:decimal(15,2);not null;default:0"`
-	PriceYearly  float64   `gorm:"type:decimal(15,2);not null;default:0"`
+	PriceMonthly    float64   `gorm:"type:decimal(15,2);not null;default:0"`
+	PriceYearly     float64   `gorm:"type:decimal(15,2);not null;default:0"`
+	PriceDaily      float64   `gorm:"type:decimal(15,2);not null;default:0"`
+	PriceHourly     float64   `gorm:"type:decimal(15,2);not null;default:0"`
+	PricePerMinute  float64   `gorm:"type:decimal(15,2);not null;default:0"`
 	MaxUsers     int       `gorm:"not null;default:5"`
 	MaxBranches  int       `gorm:"not null;default:1"`
 	MaxOutlets   int       `gorm:"not null;default:1"`
@@ -40,7 +43,7 @@ type Subscription struct {
 	CompanyID         string     `gorm:"type:char(36);not null"`
 	PlanID            string     `gorm:"type:char(36);not null"`
 	Status            string     `gorm:"type:varchar(20);not null;default:'trial'"`
-	BillingCycle      string     `gorm:"type:varchar(10);not null;default:'monthly'"`
+	BillingCycle      string     `gorm:"type:varchar(15);not null;default:'monthly'"`
 	Amount            float64    `gorm:"type:decimal(15,2);not null;default:0"`
 	StartedAt         *time.Time
 	TrialEndsAt       *time.Time

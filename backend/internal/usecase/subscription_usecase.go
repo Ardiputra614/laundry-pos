@@ -61,18 +61,21 @@ func (uc *SubscriptionUsecase) CreatePlan(ctx *gin.Context, req dto.CreatePlanRe
 	}
 
 	plan := &domain.SubscriptionPlan{
-		ID:           uuid.New().String(),
-		Name:         req.Name,
-		Code:         req.Code,
-		Description:  req.Description,
-		PriceMonthly: req.PriceMonthly,
-		PriceYearly:  req.PriceYearly,
-		MaxUsers:     req.MaxUsers,
-		MaxBranches:  req.MaxBranches,
-		MaxOutlets:   req.MaxOutlets,
-		Features:     string(featuresJSON),
-		IsActive:     isActive,
-		SortOrder:    req.SortOrder,
+		ID:             uuid.New().String(),
+		Name:           req.Name,
+		Code:           req.Code,
+		Description:    req.Description,
+		PriceMonthly:   req.PriceMonthly,
+		PriceYearly:    req.PriceYearly,
+		PriceDaily:     req.PriceDaily,
+		PriceHourly:    req.PriceHourly,
+		PricePerMinute: req.PricePerMinute,
+		MaxUsers:       req.MaxUsers,
+		MaxBranches:    req.MaxBranches,
+		MaxOutlets:     req.MaxOutlets,
+		Features:       string(featuresJSON),
+		IsActive:       isActive,
+		SortOrder:      req.SortOrder,
 	}
 
 	if err := uc.planRepo.Create(plan); err != nil {
@@ -104,6 +107,15 @@ func (uc *SubscriptionUsecase) UpdatePlan(ctx *gin.Context, id string, req dto.U
 	}
 	if req.PriceYearly != nil {
 		plan.PriceYearly = *req.PriceYearly
+	}
+	if req.PriceDaily != nil {
+		plan.PriceDaily = *req.PriceDaily
+	}
+	if req.PriceHourly != nil {
+		plan.PriceHourly = *req.PriceHourly
+	}
+	if req.PricePerMinute != nil {
+		plan.PricePerMinute = *req.PricePerMinute
 	}
 	if req.MaxUsers != nil {
 		plan.MaxUsers = *req.MaxUsers
@@ -191,7 +203,10 @@ func (uc *SubscriptionUsecase) GetCompanySubscription(ctx *gin.Context) (*dto.Su
 	sub, err := uc.subRepo.FindByCompany(companyID)
 	if err != nil {
 		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, http.StatusNotFound, domain.ErrNotFound
+			resp := &dto.SubscriptionResponse{
+				Status: "none",
+			}
+			return resp, http.StatusOK, nil
 		}
 		return nil, http.StatusInternalServerError, err
 	}
@@ -238,20 +253,14 @@ func (uc *SubscriptionUsecase) ChangePlan(ctx *gin.Context, req dto.ChangePlanRe
 	}
 
 	now := time.Now()
-	amount := plan.PriceMonthly
-	if billingCycle == "yearly" {
-		amount = plan.PriceYearly
-	}
+	amount := planAmount(plan, billingCycle)
 
 	sub.PlanID = plan.ID
 	sub.Amount = amount
 	sub.BillingCycle = billingCycle
 	sub.Status = string(domain.SubActive)
 	sub.CurrentPeriodStart = &now
-	periodEnd := now.AddDate(0, 1, 0)
-	if billingCycle == "yearly" {
-		periodEnd = now.AddDate(1, 0, 0)
-	}
+	periodEnd := calculatePeriodEnd(now, billingCycle)
 	sub.CurrentPeriodEnd = &periodEnd
 
 	if err := uc.subRepo.Update(sub); err != nil {
@@ -297,10 +306,7 @@ func (uc *SubscriptionUsecase) SelectPlan(ctx *gin.Context, req dto.ChangePlanRe
 		billingCycle = "monthly"
 	}
 
-	amount := plan.PriceMonthly
-	if billingCycle == "yearly" {
-		amount = plan.PriceYearly
-	}
+	amount := planAmount(plan, billingCycle)
 
 	sub, err := uc.subRepo.FindByCompany(companyID)
 	if err != nil {
@@ -415,14 +421,11 @@ func (uc *SubscriptionUsecase) CreateSubscriptionPayment(ctx *gin.Context, req d
 		return nil, http.StatusBadRequest, errors.New("plan is not active")
 	}
 
-	amount := plan.PriceMonthly
 	billingCycle := req.BillingCycle
 	if billingCycle == "" {
 		billingCycle = "monthly"
 	}
-	if billingCycle == "yearly" {
-		amount = plan.PriceYearly
-	}
+	amount := planAmount(plan, billingCycle)
 
 	// Create or update subscription
 	sub, err := uc.subRepo.FindByCompany(companyID)
@@ -523,6 +526,42 @@ func (uc *SubscriptionUsecase) CreateSubscriptionPayment(ctx *gin.Context, req d
 	return resp, http.StatusOK, nil
 }
 
+// calculatePeriodEnd returns the subscription period end time based on billing cycle.
+func calculatePeriodEnd(start time.Time, billingCycle string) time.Time {
+	switch billingCycle {
+	case "yearly":
+		return start.AddDate(1, 0, 0)
+	case "monthly":
+		return start.AddDate(0, 1, 0)
+	case "daily":
+		return start.AddDate(0, 0, 1)
+	case "hourly":
+		return start.Add(1 * time.Hour)
+	case "per_minute":
+		return start.Add(1 * time.Minute)
+	default:
+		return start.AddDate(0, 1, 0)
+	}
+}
+
+// planAmount returns the price for a plan based on the billing cycle.
+func planAmount(plan *domain.SubscriptionPlan, billingCycle string) float64 {
+	switch billingCycle {
+	case "yearly":
+		return plan.PriceYearly
+	case "monthly":
+		return plan.PriceMonthly
+	case "daily":
+		return plan.PriceDaily
+	case "hourly":
+		return plan.PriceHourly
+	case "per_minute":
+		return plan.PricePerMinute
+	default:
+		return plan.PriceMonthly
+	}
+}
+
 // --- helpers ---
 
 func toPlanResponse(plan *domain.SubscriptionPlan) *dto.PlanResponse {
@@ -532,20 +571,23 @@ func toPlanResponse(plan *domain.SubscriptionPlan) *dto.PlanResponse {
 	}
 
 	return &dto.PlanResponse{
-		ID:           plan.ID,
-		Name:         plan.Name,
-		Code:         plan.Code,
-		Description:  plan.Description,
-		PriceMonthly: plan.PriceMonthly,
-		PriceYearly:  plan.PriceYearly,
-		MaxUsers:     plan.MaxUsers,
-		MaxBranches:  plan.MaxBranches,
-		MaxOutlets:   plan.MaxOutlets,
-		Features:     features,
-		IsActive:     plan.IsActive,
-		SortOrder:    plan.SortOrder,
-		CreatedAt:    plan.CreatedAt.Format("2006-01-02T15:04:05Z"),
-		UpdatedAt:    plan.UpdatedAt.Format("2006-01-02T15:04:05Z"),
+		ID:             plan.ID,
+		Name:           plan.Name,
+		Code:           plan.Code,
+		Description:    plan.Description,
+		PriceMonthly:   plan.PriceMonthly,
+		PriceYearly:    plan.PriceYearly,
+		PriceDaily:     plan.PriceDaily,
+		PriceHourly:    plan.PriceHourly,
+		PricePerMinute: plan.PricePerMinute,
+		MaxUsers:       plan.MaxUsers,
+		MaxBranches:    plan.MaxBranches,
+		MaxOutlets:     plan.MaxOutlets,
+		Features:       features,
+		IsActive:       plan.IsActive,
+		SortOrder:      plan.SortOrder,
+		CreatedAt:      plan.CreatedAt.Format("2006-01-02T15:04:05Z"),
+		UpdatedAt:      plan.UpdatedAt.Format("2006-01-02T15:04:05Z"),
 	}
 }
 

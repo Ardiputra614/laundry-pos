@@ -53,6 +53,7 @@ async function initDatabase() {
       price_type TEXT DEFAULT 'weight',
       unit TEXT DEFAULT 'kg',
       base_price REAL DEFAULT 0,
+      discount_percent REAL DEFAULT 0,
       min_quantity INTEGER DEFAULT 1,
       estimated_hours INTEGER DEFAULT 24,
       is_active INTEGER DEFAULT 1,
@@ -108,6 +109,14 @@ async function initDatabase() {
       created_at TEXT
     );
   `);
+
+  migrateSchema(d);
+}
+
+async function migrateSchema(d: SQLite.SQLiteDatabase) {
+  try {
+    await d.runAsync("ALTER TABLE services ADD COLUMN discount_percent REAL DEFAULT 0");
+  } catch {}
 }
 
 export const dbOrders = {
@@ -134,6 +143,16 @@ export const dbOrders = {
     const rows = await d.getAllAsync<any>('SELECT * FROM orders ORDER BY created_at DESC');
     return rows.map((o: any) => ({ ...o, items: o.items_json ? JSON.parse(o.items_json) : [] }));
   },
+  getRecent: async (months = 3): Promise<any[]> => {
+    const d = await getDatabase();
+    const cutoff = new Date();
+    cutoff.setMonth(cutoff.getMonth() - months);
+    const rows = await d.getAllAsync<any>(
+      'SELECT * FROM orders WHERE created_at >= ? ORDER BY created_at DESC',
+      cutoff.toISOString()
+    );
+    return rows.map((o: any) => ({ ...o, items: o.items_json ? JSON.parse(o.items_json) : [] }));
+  },
   getById: async (id: string): Promise<any | null> => {
     const d = await getDatabase();
     const row = await d.getFirstAsync<any>('SELECT * FROM orders WHERE id = ?', id);
@@ -144,18 +163,30 @@ export const dbOrders = {
     const d = await getDatabase();
     return d.getAllAsync<any>('SELECT * FROM orders WHERE status = ? ORDER BY created_at DESC', status);
   },
+  updateStatus: async (id: string, status: string, syncStatus = 'synced') => {
+    const d = await getDatabase();
+    await d.runAsync(
+      "UPDATE orders SET status = ?, sync_status = ?, updated_at = ? WHERE id = ?",
+      status, syncStatus, new Date().toISOString(), id
+    );
+  },
+  delete: async (id: string) => {
+    const d = await getDatabase();
+    await d.runAsync('DELETE FROM orders WHERE id = ?', id);
+  },
 };
 
 export const dbServices = {
-  upsert: async (svc: any) => {
+  upsert: async (svc: any, syncStatus = 'synced') => {
     const d = await getDatabase();
     await d.runAsync(
-      `INSERT OR REPLACE INTO services (id, tenant_id, company_id, category_id, name, description, price_type, unit, base_price, min_quantity, estimated_hours, is_active, sync_status, updated_at, created_at)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'synced', ?, ?)`,
+      `INSERT OR REPLACE INTO services (id, tenant_id, company_id, category_id, name, description, price_type, unit, base_price, min_quantity, estimated_hours, discount_percent, is_active, sync_status, updated_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       svc.id, svc.tenant_id, svc.company_id, svc.category_id, svc.name,
       svc.description || '', svc.price_type || 'weight', svc.unit || 'kg',
       svc.base_price || 0, svc.min_quantity || 1, svc.estimated_hours || 24,
-      svc.is_active !== false ? 1 : 0,
+      svc.discount_percent || 0, svc.is_active !== false ? 1 : 0,
+      syncStatus,
       svc.updated_at || new Date().toISOString(),
       svc.created_at || new Date().toISOString()
     );
@@ -163,6 +194,14 @@ export const dbServices = {
   getAll: async (): Promise<any[]> => {
     const d = await getDatabase();
     return d.getAllAsync<any>('SELECT * FROM services WHERE is_active = 1 ORDER BY name ASC');
+  },
+  getById: async (id: string): Promise<any | null> => {
+    const d = await getDatabase();
+    return d.getFirstAsync<any>('SELECT * FROM services WHERE id = ?', id);
+  },
+  deactivate: async (id: string) => {
+    const d = await getDatabase();
+    await d.runAsync("UPDATE services SET is_active = 0, sync_status = 'pending' WHERE id = ?", id);
   },
   clear: async () => {
     const d = await getDatabase();

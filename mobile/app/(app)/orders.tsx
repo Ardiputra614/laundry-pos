@@ -38,7 +38,7 @@ export default function OrdersScreen() {
         dbOrders.upsert({ ...o, tenant_id: o.tenant_id || tenantId, company_id: o.company_id || companyId }, 'synced')
       );
     } catch {
-      const local = await dbOrders.getAll();
+      const local = await dbOrders.getRecent(3);
       setOrders(local);
     } finally {
       setLoading(false);

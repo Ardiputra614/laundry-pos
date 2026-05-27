@@ -10,7 +10,8 @@ import { LoadingScreen } from '@/components/LoadingScreen';
 import { useColors, spacing, borderRadius, fontSize } from '@/lib/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/lib/api';
-import { dbServices, dbCategories } from '@/lib/database';
+import { dbServices, dbCategories, dbSyncQueue } from '@/lib/database';
+import { useAuthStore } from '@/stores/authStore';
 import { useI18nStore } from '@/stores/i18nStore';
 import { t } from '@/lib/i18n';
 import Toast from 'react-native-toast-message';
@@ -67,9 +68,8 @@ export default function ServicesScreen() {
       const catData = catRes.data.data || [];
       setServices(svcData);
       setCategories(catData);
-      svcData.forEach((s: any) => dbServices.upsert(s));
-      dbCategories.clear();
-      catData.forEach((c: any) => dbCategories.upsert(c));
+      svcData.forEach((s: any) => dbServices.upsert(s).catch(() => {}));
+      catData.forEach((c: any) => dbCategories.upsert(c).catch(() => {}));
     } catch {
       const [local, localCats] = await Promise.all([
         dbServices.getAll(),
@@ -127,8 +127,12 @@ export default function ServicesScreen() {
               await api.delete(`/services/${svc.id}`);
               Toast.show({ type: 'success', text1: 'Berhasil', text2: 'Layanan dihapus' });
               fetchData();
-            } catch (error: any) {
-              Toast.show({ type: 'error', text1: 'Gagal', text2: error.response?.data?.message || error.message });
+            } catch {
+              await dbServices.deactivate(svc.id);
+              const { tenantId, companyId } = useAuthStore.getState();
+              await dbSyncQueue.add('services_delete', 'delete', svc.id, { tenant_id: tenantId, company_id: companyId });
+              Toast.show({ type: 'success', text1: 'Disimpan Offline', text2: 'Layanan akan dihapus saat online' });
+              fetchData();
             }
           },
         },
@@ -158,11 +162,37 @@ export default function ServicesScreen() {
       };
 
       if (editing) {
-        await api.put(`/services/${editing.id}`, payload);
-        Toast.show({ type: 'success', text1: 'Berhasil', text2: 'Layanan diperbarui' });
+        try {
+          await api.put(`/services/${editing.id}`, payload);
+          Toast.show({ type: 'success', text1: 'Berhasil', text2: 'Layanan diperbarui' });
+        } catch {
+          const { tenantId, companyId } = useAuthStore.getState();
+          await dbServices.upsert({ ...editing, ...payload, tenant_id: tenantId, company_id: companyId, updated_at: new Date().toISOString() }, 'pending');
+          await dbSyncQueue.add('services_update', 'update', editing.id, payload);
+          Toast.show({ type: 'success', text1: 'Disimpan Offline', text2: 'Perubahan akan tersinkron nanti' });
+        }
       } else {
-        await api.post('/services', payload);
-        Toast.show({ type: 'success', text1: 'Berhasil', text2: 'Layanan ditambahkan' });
+        const newId = Date.now().toString(36) + Math.random().toString(36).slice(2, 8);
+        const { tenantId, companyId } = useAuthStore.getState();
+        const localSvc = {
+          id: newId,
+          tenant_id: tenantId || '',
+          company_id: companyId || '',
+          category_id: formCategory || '',
+          ...payload,
+          is_active: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        try {
+          await api.post('/services', payload);
+          dbServices.upsert(localSvc, 'synced');
+          Toast.show({ type: 'success', text1: 'Berhasil', text2: 'Layanan ditambahkan' });
+        } catch {
+          dbServices.upsert(localSvc, 'pending');
+          await dbSyncQueue.add('services', 'create', newId, payload);
+          Toast.show({ type: 'success', text1: 'Disimpan Offline', text2: 'Layanan akan tersinkron nanti' });
+        }
       }
       setShowModal(false);
       fetchData();

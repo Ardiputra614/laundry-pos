@@ -10,7 +10,7 @@ import { LoadingScreen } from '@/components/LoadingScreen';
 import { useColors, spacing, borderRadius, fontSize } from '@/lib/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/lib/api';
-import { dbOrders } from '@/lib/database';
+import { dbOrders, dbSyncQueue } from '@/lib/database';
 import { format } from 'date-fns';
 import Toast from 'react-native-toast-message';
 import * as Print from 'expo-print';
@@ -99,10 +99,14 @@ export default function OrderDetailScreen() {
   const handleStatusUpdate = async (newStatus: string) => {
     try {
       await api.put(`/orders/${id}/status`, { status: newStatus });
+      await dbOrders.updateStatus(id, newStatus, 'synced');
       Toast.show({ type: 'success', text1: 'Berhasil', text2: `Status diubah ke ${newStatus}` });
       fetchOrder();
-    } catch (error: any) {
-      Toast.show({ type: 'error', text1: 'Gagal', text2: error.response?.data?.message || 'Gagal update status' });
+    } catch {
+      await dbOrders.updateStatus(id, newStatus, 'pending');
+      await dbSyncQueue.add('orders_status', 'update', id, { status: newStatus });
+      Toast.show({ type: 'success', text1: 'Disimpan Offline', text2: 'Status akan tersinkron nanti' });
+      fetchOrder();
     }
   };
 
@@ -350,6 +354,9 @@ export default function OrderDetailScreen() {
 
         <Card style={styles.section}>
           <ThemedText variant="heading" style={styles.sectionTitle}>{t('order.info', language)}</ThemedText>
+          <InfoRow label="Pelanggan" value={order.customer_name || order.customer?.name || '-'} />
+          <InfoRow label="No. WA" value={order.customer_phone || order.customer?.phone || '-'} />
+          <InfoRow label="Alamat" value={order.customer_address || order.customer?.address || '-'} />
           <InfoRow label={t('order.status', language)} value={order.order_type === 'dropoff' ? t('order.type_dropoff', language) : t('order.type_pickup', language)} />
           <InfoRow label={t('order.info', language)} value={order.service_type === 'express' ? t('order.service_express', language) : t('order.service_regular', language)} />
           {order.total_weight > 0 && <InfoRow label="Berat" value={`${order.total_weight} kg`} />}
@@ -373,8 +380,10 @@ export default function OrderDetailScreen() {
                   await api.post(`/orders/${id}/payment`, { amount: order.grand_total, payment_method: 'cash', payment_channel: 'cash' });
                   Toast.show({ type: 'success', text1: 'Berhasil', text2: 'Pembayaran dicatat' });
                   fetchOrder();
-                } catch (error: any) {
-                  Toast.show({ type: 'error', text1: 'Gagal', text2: 'Error processing payment' });
+                } catch {
+                  await dbSyncQueue.add('orders_payment', 'payment', id, { amount: order.grand_total, payment_method: 'cash', payment_channel: 'cash' });
+                  Toast.show({ type: 'success', text1: 'Disimpan Offline', text2: 'Pembayaran akan dicatat nanti' });
+                  fetchOrder();
                 }
               }}
               variant="outline"

@@ -1,5 +1,5 @@
 import React, { useEffect, useState } from 'react';
-import { View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity } from 'react-native';
+import { View, StyleSheet, ScrollView, RefreshControl, TouchableOpacity, useWindowDimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useAuth } from '@/providers/AuthProvider';
 import { ThemedView } from '@/components/ThemedView';
@@ -21,6 +21,9 @@ export default function DashboardScreen() {
   const [stats, setStats] = useState({ orders_today: 0, revenue_today: 0, pending_orders: 0 });
   const [recentOrders, setRecentOrders] = useState<any[]>([]);
   const colors = useColors();
+
+  const { width, height } = useWindowDimensions();
+  const isPortrait = width < height;
 
   const fetchDashboard = async () => {
     try {
@@ -45,7 +48,7 @@ export default function DashboardScreen() {
         );
       }
     } catch {
-      const local = await dbOrders.getAll();
+      const local = await dbOrders.getRecent(3);
       const recent = local.slice(0, 5);
       setRecentOrders(recent);
       const today = recent.filter((o: any) => {
@@ -103,22 +106,43 @@ export default function DashboardScreen() {
           </TouchableOpacity>
         </View>
 
-        <View style={styles.statsRow}>
-          <Card style={styles.statCard}>
-            <ThemedText variant="hero" color={colors.primary}>{stats.orders_today}</ThemedText>
-            <ThemedText variant="caption">Orders Today</ThemedText>
-          </Card>
-          <Card style={styles.statCard}>
-            <ThemedText variant="hero" color={colors.success}>
-              Rp {stats.revenue_today.toLocaleString()}
-            </ThemedText>
-            <ThemedText variant="caption">Revenue Today</ThemedText>
-          </Card>
-          <Card style={styles.statCard}>
-            <ThemedText variant="hero" color={colors.warning}>{stats.pending_orders}</ThemedText>
-            <ThemedText variant="caption">Pending</ThemedText>
-          </Card>
-        </View>
+        {isPortrait ? (
+          <View>
+            <View style={styles.statsRow}>
+              <Card style={[styles.statCard, { flex: 1 }]}>
+                <ThemedText variant="hero" color={colors.primary}>{stats.orders_today}</ThemedText>
+                <ThemedText variant="caption">Orders Today</ThemedText>
+              </Card>
+              <Card style={[styles.statCard, { flex: 1 }]}>
+                <ThemedText variant="hero" color={colors.warning}>{stats.pending_orders}</ThemedText>
+                <ThemedText variant="caption">Pending</ThemedText>
+              </Card>
+            </View>
+            <Card style={[styles.statCard, { flex: 0, width: '100%', marginBottom: spacing.lg }]}>
+              <ThemedText variant="hero" color={colors.success}>
+                Rp {stats.revenue_today.toLocaleString()}
+              </ThemedText>
+              <ThemedText variant="caption">Revenue Today</ThemedText>
+            </Card>
+          </View>
+        ) : (
+          <View style={styles.statsRow}>
+            <Card style={styles.statCard}>
+              <ThemedText variant="hero" color={colors.primary}>{stats.orders_today}</ThemedText>
+              <ThemedText variant="caption">Orders Today</ThemedText>
+            </Card>
+            <Card style={styles.statCard}>
+              <ThemedText variant="hero" color={colors.success}>
+                Rp {stats.revenue_today.toLocaleString()}
+              </ThemedText>
+              <ThemedText variant="caption">Revenue Today</ThemedText>
+            </Card>
+            <Card style={styles.statCard}>
+              <ThemedText variant="hero" color={colors.warning}>{stats.pending_orders}</ThemedText>
+              <ThemedText variant="caption">Pending</ThemedText>
+            </Card>
+          </View>
+        )}
 
         <View style={styles.quickActions}>
           <ThemedText variant="heading" style={styles.sectionTitle}>Quick Actions</ThemedText>

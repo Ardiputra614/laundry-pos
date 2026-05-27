@@ -25,7 +25,7 @@ export default function ProfileScreen() {
   const { language, setLanguage } = useI18nStore();
   const { status: subStatus } = useSubscriptionStore();
   const { user, logout } = useAuth();
-  const isPending = subStatus === 'pending';
+  const isLocked = !subStatus || subStatus === 'pending' || subStatus === 'trial';
   const isActive = subStatus === 'active' || subStatus === 'trial';
   const router = useRouter();
 
@@ -67,7 +67,7 @@ export default function ProfileScreen() {
 
   // ---- Printer ----
   React.useEffect(() => { if (showPrinter) {
-    if (isPending) { setShowPrinter(false); return; }
+    if (isLocked) { setShowPrinter(false); return; }
     loadSaved();
   } }, [showPrinter]);
   const loadSaved = async () => { const s = await getSavedPrinter(); setSavedPrinter(s); };
@@ -221,8 +221,8 @@ export default function ProfileScreen() {
           <TouchableRow icon="lock-closed-outline" label="Ubah Password" onPress={() => setShowChangePw(true)} />
           <TouchableRow icon="language-outline" label="Bahasa" onPress={() => setShowLanguage(true)} />
           <TouchableRow icon={isDark ? 'moon-outline' : 'sunny-outline'} label="Tampilan" onPress={() => setShowTheme(true)} />
-          <TouchableRow icon="settings-outline" label="Pajak & Diskon" onPress={() => isPending ? router.push('/(app)/subscription' as any) : router.push('/(app)/settings' as any)} locked={isPending} />
-          <TouchableRow icon="print-outline" label="Printer Struk" onPress={() => isPending ? router.push('/(app)/subscription' as any) : setShowPrinter(true)} locked={isPending} />
+          <TouchableRow icon="settings-outline" label="Pajak & Diskon" onPress={() => isLocked ? router.push('/(app)/subscription' as any) : router.push('/(app)/settings' as any)} locked={isLocked} />
+          <TouchableRow icon="print-outline" label="Printer Struk" onPress={() => isLocked ? router.push('/(app)/subscription' as any) : setShowPrinter(true)} locked={isLocked} />
           <TouchableRow icon="information-circle-outline" label="Tentang" onPress={() => setShowAbout(true)} />
         </Card>
 

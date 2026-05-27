@@ -9,12 +9,13 @@ import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { ThemedText } from '@/components/ThemedText';
 import { Card } from '@/components/Card';
 import { Button } from '@/components/Button';
+import { NetworkIndicator } from '@/components/NetworkIndicator';
 
 function ScanButton(props: any) {
   const colors = useColors();
   const router = useRouter();
-  const { status } = useSubscriptionStore();
-  const isLocked = status === 'pending';
+  const { status, loading } = useSubscriptionStore();
+  const isLocked = !loading && status !== 'active';
   const scanStyles = React.useMemo(() => createStyles(colors), [colors]);
   return (
     <TouchableOpacity
@@ -48,21 +49,29 @@ function LockableTabIcon({ children, onPress, locked }: { children: React.ReactN
 export default function AppLayout() {
   const colors = useColors();
   const { user } = useAuth();
-  const { status, loading: subLoading } = useSubscriptionStore();
+  const { status, loading: subLoading, daysUntilExpiry } = useSubscriptionStore();
   const router = useRouter();
   const insets = useSafeAreaInsets();
   const isSuperadmin = user?.role === 'superadmin';
-  const isPending = status === 'pending';
+  const isLocked = !subLoading && (status === 'pending' || status === 'none');
+  const isExpiringSoon = !isLocked && daysUntilExpiry !== null && daysUntilExpiry >= 0 && daysUntilExpiry <= 3;
   const [showSubModal, setShowSubModal] = useState(false);
+  const [showExpiryWarning, setShowExpiryWarning] = useState(false);
 
   useEffect(() => {
-    if (!subLoading && isPending) {
+    if (!subLoading && isLocked) {
       setShowSubModal(true);
+      setShowExpiryWarning(false);
+    } else if (!subLoading && isExpiringSoon && daysUntilExpiry !== null && daysUntilExpiry >= 0) {
+      setShowExpiryWarning(true);
     }
-  }, [subLoading, isPending]);
+  }, [subLoading, isLocked, isExpiringSoon, daysUntilExpiry]);
 
   return (
     <>
+      <View style={{ position: 'absolute', top: 8, right: 12, zIndex: 999 }}>
+        <NetworkIndicator />
+      </View>
       <Tabs
         screenOptions={{
           headerShown: false,
@@ -80,7 +89,7 @@ export default function AppLayout() {
           },
         }}
       >
-        {/* Regular user tabs */}
+        {/* Regular user tabs — hidden for superadmin, scan & report locked when pending */}
         <Tabs.Screen
           name="index"
           options={{
@@ -109,9 +118,13 @@ export default function AppLayout() {
           name="scan"
           options={{
             title: 'Scan',
-            ...(isSuperadmin ? { href: null } : {}),
+            href: isSuperadmin ? null : undefined,
             tabBarIcon: ({ color, size }) => <Ionicons name="qr-code-outline" size={size} color={color} />,
-            ...(isSuperadmin ? {} : { tabBarButton: (props: any) => <ScanButton onPress={props.onPress} /> }),
+            ...(isSuperadmin ? {} : {
+              tabBarButton: isLocked
+                ? (props: any) => <LockableTabIcon locked onPress={props.onPress}>{props.children}</LockableTabIcon>
+                : (props: any) => <ScanButton onPress={props.onPress} />,
+            }),
           }}
         />
         <Tabs.Screen
@@ -127,11 +140,14 @@ export default function AppLayout() {
           options={{
             title: 'Report',
             href: isSuperadmin ? null : undefined,
-            tabBarIcon: ({ color, size }: any) => (
-              <LockableTabIcon locked={isPending} onPress={() => {}}>
-                <Ionicons name="bar-chart-outline" size={size} color={color} />
-              </LockableTabIcon>
+            tabBarIcon: ({ color, size }) => (
+              <Ionicons name="bar-chart-outline" size={size} color={color} />
             ),
+            ...(isSuperadmin ? {} : {
+              tabBarButton: isLocked
+                ? (props: any) => <LockableTabIcon locked onPress={props.onPress}>{props.children}</LockableTabIcon>
+                : undefined,
+            }),
           }}
         />
         <Tabs.Screen
@@ -201,7 +217,37 @@ export default function AppLayout() {
         />
       </Tabs>
 
-      {/* Subscription reminder modal */}
+      {/* Expiry warning modal - 3 days before */}
+      <Modal visible={showExpiryWarning && daysUntilExpiry !== null && daysUntilExpiry <= 3 && daysUntilExpiry >= 0} animationType="fade" transparent>
+        <View style={styles.subModalOverlay}>
+          <Card style={styles.subModalCard}>
+            <Ionicons name="warning-outline" size={48} color="#F59E0B" style={{ alignSelf: 'center', marginBottom: spacing.md }} />
+            <ThemedText variant="heading" style={{ textAlign: 'center', marginBottom: spacing.sm }}>
+              Langganan Akan Berakhir
+            </ThemedText>
+            <ThemedText variant="body" color={colors.textSecondary} style={{ textAlign: 'center', marginBottom: spacing.lg }}>
+              {daysUntilExpiry === 0
+                ? 'Langganan Anda berakhir hari ini. Perpanjang sekarang untuk terus menggunakan semua fitur.'
+                : daysUntilExpiry === 1
+                  ? 'Langganan Anda akan berakhir besok. Perpanjang sekarang untuk terus menggunakan semua fitur.'
+                  : `Langganan Anda akan berakhir dalam ${daysUntilExpiry} hari. Perpanjang sekarang untuk terus menggunakan semua fitur.`}
+            </ThemedText>
+            <ThemedText variant="body" color={colors.textSecondary} style={{ textAlign: 'center', marginBottom: spacing.lg }}>
+              Perpanjangan harus dilakukan saat online.
+            </ThemedText>
+            <Button title="Perpanjang Langganan" onPress={() => { setShowExpiryWarning(false); router.push('/(app)/subscription'); }} size="lg" />
+            <Button
+              title="Nanti"
+              onPress={() => setShowExpiryWarning(false)}
+              variant="ghost"
+              size="md"
+              style={{ marginTop: spacing.sm }}
+            />
+          </Card>
+        </View>
+      </Modal>
+
+      {/* Subscription required modal */}
       <Modal visible={showSubModal} animationType="fade" transparent>
         <View style={styles.subModalOverlay}>
           <Card style={styles.subModalCard}>
@@ -210,7 +256,7 @@ export default function AppLayout() {
               Langganan Diperlukan
             </ThemedText>
             <ThemedText variant="body" color={colors.textSecondary} style={{ textAlign: 'center', marginBottom: spacing.lg }}>
-              Silakan pilih paket dan selesaikan pembayaran untuk mengaktifkan semua fitur.
+              Pilih paket dan selesaikan pembayaran untuk mengaktifkan semua fitur.
             </ThemedText>
             <Button title="Pilih Paket" onPress={() => { setShowSubModal(false); router.push('/(app)/subscription'); }} size="lg" />
             <Button

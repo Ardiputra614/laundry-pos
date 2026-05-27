@@ -9,6 +9,7 @@ import { LoadingScreen } from '@/components/LoadingScreen';
 import { useColors, spacing, borderRadius } from '@/lib/theme';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/lib/api';
+import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import Toast from 'react-native-toast-message';
 import { WebView } from 'react-native-webview';
 import { Modal } from 'react-native';
@@ -36,6 +37,7 @@ export default function SubscriptionScreen() {
   const [paying, setPaying] = useState(false);
   const [paymentUrl, setPaymentUrl] = useState('');
   const [showPayment, setShowPayment] = useState(false);
+  const { fetchSubscription } = useSubscriptionStore();
 
   const fetchData = async () => {
     try {
@@ -65,6 +67,7 @@ export default function SubscriptionScreen() {
         billing_cycle: 'monthly',
       });
       setSubscription(data.data);
+      fetchSubscription();
       Toast.show({ type: 'success', text1: 'Paket Dipilih', text2: 'Silakan lanjutkan pembayaran' });
     } catch (error: any) {
       Toast.show({ type: 'error', text1: 'Gagal', text2: error.response?.data?.message || error.message });
@@ -232,6 +235,7 @@ export default function SubscriptionScreen() {
                   setShowPayment(false);
                   setPaymentUrl('');
                   Toast.show({ type: 'success', text1: 'Pembayaran Berhasil', text2: 'Langganan diaktifkan' });
+                  fetchSubscription();
                   fetchData();
                 }
               }}
