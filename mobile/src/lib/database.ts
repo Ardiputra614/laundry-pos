@@ -108,6 +108,16 @@ async function initDatabase() {
       error TEXT,
       created_at TEXT
     );
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      email TEXT NOT NULL,
+      full_name TEXT NOT NULL,
+      phone TEXT,
+      role TEXT NOT NULL,
+      is_active INTEGER DEFAULT 1,
+      updated_at TEXT,
+      created_at TEXT
+    );
   `);
 
   migrateSchema(d);
@@ -251,6 +261,32 @@ export const dbCustomers = {
   getByPhone: async (phone: string): Promise<any | null> => {
     const d = await getDatabase();
     return d.getFirstAsync<any>('SELECT * FROM customers WHERE phone = ? LIMIT 1', phone);
+  },
+};
+
+export const dbUsers = {
+  upsert: async (user: any) => {
+    const d = await getDatabase();
+    await d.runAsync(
+      `INSERT OR REPLACE INTO users (id, email, full_name, phone, role, is_active, updated_at, created_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+      user.id, user.email, user.full_name, user.phone || '',
+      user.role, user.is_active !== false ? 1 : 0,
+      user.updated_at || new Date().toISOString(),
+      user.created_at || new Date().toISOString()
+    );
+  },
+  getCurrent: async (): Promise<any | null> => {
+    const d = await getDatabase();
+    return d.getFirstAsync<any>('SELECT * FROM users ORDER BY created_at DESC LIMIT 1');
+  },
+  getByEmail: async (email: string): Promise<any | null> => {
+    const d = await getDatabase();
+    return d.getFirstAsync<any>('SELECT * FROM users WHERE email = ? LIMIT 1', email);
+  },
+  removeAll: async () => {
+    const d = await getDatabase();
+    await d.runAsync('DELETE FROM users');
   },
 };
 

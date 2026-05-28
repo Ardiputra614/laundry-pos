@@ -15,6 +15,7 @@ import { t, Language } from '@/lib/i18n';
 import { Ionicons } from '@expo/vector-icons';
 import { api } from '@/lib/api';
 import Toast from 'react-native-toast-message';
+import { dbUsers } from '@/lib/database';
 import * as Print from 'expo-print';
 import { scanPrinters, connectPrinter, disconnectPrinter, printESC, buildReceipt } from '@/lib/blePrinter';
 import { savePrinter, getSavedPrinter, removeSavedPrinter, SavedPrinter } from '@/lib/printerStore';
@@ -24,7 +25,7 @@ export default function ProfileScreen() {
   const { isDark, toggleTheme } = useThemeStore();
   const { language, setLanguage } = useI18nStore();
   const { status: subStatus } = useSubscriptionStore();
-  const { user, logout } = useAuth();
+  const { user, logout, refreshUser } = useAuth();
   const isLocked = !subStatus || subStatus === 'pending' || subStatus === 'trial';
   const isActive = subStatus === 'active' || subStatus === 'trial';
   const router = useRouter();
@@ -34,6 +35,13 @@ export default function ProfileScreen() {
   // Settings modals
   const [showChangePw, setShowChangePw] = useState(false);
   const [showAbout, setShowAbout] = useState(false);
+  const [aboutConfig, setAboutConfig] = useState<any>(null);
+
+  useEffect(() => {
+    if (showAbout && !aboutConfig) {
+      api.get('/app-config').then(({ data }) => setAboutConfig(data.data)).catch(() => {});
+    }
+  }, [showAbout]);
   const [showPrinter, setShowPrinter] = useState(false);
   const [showLanguage, setShowLanguage] = useState(false);
   const [showTheme, setShowTheme] = useState(false);
@@ -50,6 +58,39 @@ export default function ProfileScreen() {
   const [bleConnected, setBleConnected] = useState(false);
 
   const [refreshing, setRefreshing] = useState(false);
+
+  // Edit profile
+  const [showEditProfile, setShowEditProfile] = useState(false);
+  const [editName, setEditName] = useState('');
+  const [editEmail, setEditEmail] = useState('');
+  const [editPhone, setEditPhone] = useState('');
+  const [savingProfile, setSavingProfile] = useState(false);
+
+  // About
+  const [appConfig, setAppConfig] = useState<any>(null);
+
+  useEffect(() => {
+    if (showEditProfile) {
+      setEditName(user?.full_name || '');
+      setEditEmail(user?.email || '');
+      setEditPhone(user?.phone || '');
+    }
+  }, [showEditProfile]);
+
+  const handleSaveProfile = async () => {
+    setSavingProfile(true);
+    try {
+      await api.put('/profile', { full_name: editName, email: editEmail, phone: editPhone });
+      await refreshUser();
+      const u = { ...user, full_name: editName, email: editEmail, phone: editPhone };
+      await dbUsers.upsert(u);
+      Toast.show({ type: 'success', text1: 'Berhasil', text2: 'Profil diperbarui' });
+      setShowEditProfile(false);
+    } catch (error: any) {
+      Toast.show({ type: 'error', text1: 'Gagal', text2: error.response?.data?.message || error.message });
+    }
+    setSavingProfile(false);
+  };
 
   useEffect(() => {
     fetchSubscription();
@@ -208,6 +249,7 @@ export default function ProfileScreen() {
           <InfoRow icon="mail-outline" label="Email" value={user?.email} />
           <InfoRow icon="call-outline" label="Telepon" value={user?.phone} />
           <InfoRow icon="shield-checkmark-outline" label="Role" value={user?.role} />
+          <TouchableRow icon="create-outline" label="Edit Profil" onPress={() => setShowEditProfile(true)} />
         </Card>
 
         {/* === SUBSCRIPTION MENU === */}
@@ -230,6 +272,20 @@ export default function ProfileScreen() {
       </ScrollView>
 
       {/* ======== MODALS ======== */}
+
+      {/* Edit Profile */}
+      <Modal visible={showEditProfile} animationType="slide" transparent>
+        <View style={styles.modalOverlay}><View style={styles.modalContent}>
+          <View style={styles.modalHeader}>
+            <ThemedText variant="heading">Edit Profil</ThemedText>
+            <TouchableOpacity onPress={() => setShowEditProfile(false)}><Ionicons name="close" size={24} color={colors.text} /></TouchableOpacity>
+          </View>
+          <Input label="Nama Lengkap" placeholder="Masukkan nama" value={editName} onChangeText={setEditName} icon="person-outline" />
+          <Input label="Email" placeholder="Masukkan email" value={editEmail} onChangeText={setEditEmail} keyboardType="email-address" autoCapitalize="none" icon="mail-outline" />
+          <Input label="No. Telepon" placeholder="Masukkan no telepon" value={editPhone} onChangeText={setEditPhone} keyboardType="phone-pad" icon="call-outline" />
+          <Button title="Simpan" onPress={handleSaveProfile} loading={savingProfile} />
+        </View></View>
+      </Modal>
 
       {/* Change Password */}
       <Modal visible={showChangePw} animationType="slide" transparent>
@@ -306,10 +362,10 @@ export default function ProfileScreen() {
           </View>
           <View style={styles.aboutSection}>
             <Ionicons name="shirt-outline" size={64} color={colors.primary} />
-            <ThemedText variant="title" style={{ marginTop: spacing.md }}>Laundry POS</ThemedText>
-            <ThemedText variant="body" color={colors.textSecondary}>Versi 1.0.0</ThemedText>
+            <ThemedText variant="title" style={{ marginTop: spacing.md }}>{aboutConfig?.app_name || 'Laundry POS'}</ThemedText>
+            <ThemedText variant="body" color={colors.textSecondary}>Versi {aboutConfig?.version || '1.0.0'}</ThemedText>
             <ThemedText variant="caption" color={colors.textSecondary} style={{ textAlign: 'center', marginTop: spacing.md }}>
-              Aplikasi manajemen laundry profesional.{'\n'}Kelola pesanan, layanan, dan bisnis laundry Anda dalam satu platform.
+              {aboutConfig?.description || 'Aplikasi manajemen laundry profesional.'}
             </ThemedText>
           </View>
         </View></View>

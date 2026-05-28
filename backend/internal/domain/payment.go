@@ -39,4 +39,6 @@ type PaymentRepository interface {
 	FindByOrderID(orderID string) ([]Payment, error)
 	FindByMidtransTransactionID(transactionID string) (*Payment, error)
 	Update(payment *Payment) error
+	SumSuccessPayments() (float64, error)
+	SumSuccessPaymentsSince(since time.Time) (float64, error)
 }

@@ -45,6 +45,7 @@ func main() {
 	employeeRepo := repository.NewEmployeeRepository(db)
 	deviceRepo := repository.NewDeviceRepository(db)
 	settingRepo := repository.NewCompanySettingRepository(db)
+	customerRepo := repository.NewCustomerRepository(db)
 
 	// Infrastructure repositories
 	notifRepo := repository.NewNotificationRepository(db)
@@ -67,14 +68,16 @@ func main() {
 	midtransClient := midtranspkg.New(cfg.MidtransServerKey, cfg.MidtransProduction)
 
 	serviceUsecase := usecase.NewServiceUsecase(serviceCategoryRepo, serviceRepo)
-	orderUsecase := usecase.NewOrderUsecase(orderRepo, orderItemRepo, orderTrackingRepo, serviceRepo, paymentRepo, settingRepo)
+	orderUsecase := usecase.NewOrderUsecase(orderRepo, orderItemRepo, orderTrackingRepo, serviceRepo, paymentRepo, settingRepo, customerRepo)
 	paymentUsecase := usecase.NewPaymentUsecase(paymentRepo, orderRepo, invoiceRepo, subscriptionRepo, companyRepo, subscriptionPlanRepo)
 	subscriptionUsecase := usecase.NewSubscriptionUsecase(subscriptionPlanRepo, subscriptionRepo, invoiceRepo, companyRepo, midtransClient)
-	superadminUsecase := usecase.NewSuperadminUsecase(companyRepo, userRepo, subscriptionRepo, subscriptionPlanRepo, invoiceRepo)
+	superadminUsecase := usecase.NewSuperadminUsecase(companyRepo, userRepo, subscriptionRepo, subscriptionPlanRepo, invoiceRepo, paymentRepo)
 	branchUsecase := usecase.NewBranchUsecase(branchRepo)
 	outletUsecase := usecase.NewOutletUsecase(outletRepo)
 	employeeUsecase := usecase.NewEmployeeUsecase(employeeRepo)
 	deviceUsecase := usecase.NewDeviceUsecase(deviceRepo)
+	appConfigRepo := repository.NewAppConfigRepository(db)
+	appConfigUsecase := usecase.NewAppConfigUsecase(appConfigRepo)
 
 	reportUsecase := usecase.NewReportUsecase(orderRepo, orderItemRepo)
 	settingsUsecase := usecase.NewSettingsUsecase(settingRepo)
@@ -100,6 +103,7 @@ func main() {
 
 	// Infrastructure handlers
 	notifHandler := handler.NewNotificationHandler(notifUsecase)
+	appConfigHandler := handler.NewAppConfigHandler(appConfigUsecase)
 
 	// S3 uploader
 	var fileUploader *uploader.Uploader
@@ -164,6 +168,7 @@ func main() {
 			protected.PUT("/auth/change-password", authHandler.ChangePassword)
 			protected.GET("/auth/me", authHandler.GetMe)
 			protected.GET("/profile", authHandler.GetProfile)
+			protected.PUT("/profile", authHandler.UpdateProfile)
 
 			protected.POST("/services/categories", serviceHandler.CreateCategory)
 			protected.GET("/services/categories", serviceHandler.ListCategories)
@@ -238,13 +243,16 @@ func main() {
 				superadmin.PUT("/plans/:id", subscriptionHandler.UpdatePlan)
 				superadmin.DELETE("/plans/:id", subscriptionHandler.DeletePlan)
 				superadmin.GET("/plans", subscriptionHandler.ListPlans)
+				superadmin.GET("/app-config", appConfigHandler.GetConfig)
+				superadmin.PUT("/app-config", appConfigHandler.UpdateConfig)
 			}
 		}
 
 		api.POST("/payments/webhook", paymentHandler.HandleMidtransWebhook)
 
-		// Public subscription routes
+		// Public routes
 		api.GET("/plans", subscriptionHandler.ListActivePlans)
+		api.GET("/app-config", appConfigHandler.GetConfig)
 	}
 
 	addr := fmt.Sprintf(":%s", cfg.AppPort)

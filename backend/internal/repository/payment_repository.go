@@ -1,6 +1,8 @@
 package repository
 
 import (
+	"time"
+
 	"github.com/ardiputra/laundry-pos/internal/domain"
 	"gorm.io/gorm"
 )
@@ -46,4 +48,22 @@ func (r *paymentRepository) FindByMidtransTransactionID(transactionID string) (*
 
 func (r *paymentRepository) Update(payment *domain.Payment) error {
 	return r.db.Save(payment).Error
+}
+
+func (r *paymentRepository) SumSuccessPayments() (float64, error) {
+	var total float64
+	err := r.db.Model(&domain.Payment{}).
+		Where("status = ?", domain.PaySuccess).
+		Select("COALESCE(SUM(amount), 0)").
+		Scan(&total).Error
+	return total, err
+}
+
+func (r *paymentRepository) SumSuccessPaymentsSince(since time.Time) (float64, error) {
+	var total float64
+	err := r.db.Model(&domain.Payment{}).
+		Where("status = ? AND paid_at >= ?", domain.PaySuccess, since).
+		Select("COALESCE(SUM(amount), 0)").
+		Scan(&total).Error
+	return total, err
 }

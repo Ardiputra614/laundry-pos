@@ -53,6 +53,21 @@ type DashboardStatsResponse struct {
 	NewCompaniesThisMonth int64   `json:"new_companies_this_month"`
 }
 
+type AppConfigResponse struct {
+	ID          string `json:"id"`
+	AppName     string `json:"app_name"`
+	Description string `json:"description"`
+	Version     string `json:"version"`
+	LogoURL     string `json:"logo_url"`
+}
+
+type UpdateAppConfigRequest struct {
+	AppName     string `json:"app_name"`
+	Description string `json:"description"`
+	Version     string `json:"version"`
+	LogoURL     string `json:"logo_url"`
+}
+
 type SystemHealthResponse struct {
 	Database  ServiceStatus `json:"database"`
 	API       ServiceStatus `json:"api"`

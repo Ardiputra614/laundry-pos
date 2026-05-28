@@ -296,6 +296,51 @@ func (uc *AuthUsecase) Logout(c *gin.Context) error {
 	return uc.refreshTokenRepo.DeleteByUserID(userID)
 }
 
+func (uc *AuthUsecase) UpdateProfile(c *gin.Context, req dto.UpdateProfileRequest) (*dto.UserDTO, int, error) {
+	userID := middleware.GetUserID(c)
+	if userID == "" {
+		return nil, http.StatusUnauthorized, domain.ErrUnauthorized
+	}
+
+	user, err := uc.userRepo.FindByID(userID)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, http.StatusNotFound, domain.ErrNotFound
+		}
+		return nil, http.StatusInternalServerError, err
+	}
+
+	if req.FullName != "" {
+		user.FullName = req.FullName
+	}
+	if req.Phone != "" {
+		user.Phone = req.Phone
+	}
+	if req.Email != "" && req.Email != user.Email {
+		existing, err := uc.userRepo.FindByEmail(req.Email)
+		if err != nil && !errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, http.StatusInternalServerError, err
+		}
+		if existing != nil {
+			return nil, http.StatusConflict, domain.ErrEmailExists
+		}
+		user.Email = req.Email
+	}
+
+	if err := uc.userRepo.Update(user); err != nil {
+		return nil, http.StatusInternalServerError, err
+	}
+
+	return &dto.UserDTO{
+		ID:       user.ID,
+		Email:    user.Email,
+		FullName: user.FullName,
+		Phone:    user.Phone,
+		Role:     string(user.Role),
+		IsActive: user.IsActive,
+	}, http.StatusOK, nil
+}
+
 func (uc *AuthUsecase) GetProfile(c *gin.Context) (*dto.UserDTO, error) {
 	userID := middleware.GetUserID(c)
 	if userID == "" {

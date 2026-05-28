@@ -3,6 +3,7 @@ package usecase
 import (
 	"errors"
 	"fmt"
+	"math/rand"
 	"net/http"
 	"time"
 
@@ -21,6 +22,7 @@ type OrderUsecase struct {
 	serviceRepo   domain.ServiceRepository
 	paymentRepo   domain.PaymentRepository
 	settingRepo   domain.CompanySettingRepository
+	customerRepo  domain.CustomerRepository
 }
 
 func NewOrderUsecase(
@@ -30,6 +32,7 @@ func NewOrderUsecase(
 	serviceRepo domain.ServiceRepository,
 	paymentRepo domain.PaymentRepository,
 	settingRepo domain.CompanySettingRepository,
+	customerRepo domain.CustomerRepository,
 ) *OrderUsecase {
 	return &OrderUsecase{
 		orderRepo:     orderRepo,
@@ -38,6 +41,7 @@ func NewOrderUsecase(
 		serviceRepo:   serviceRepo,
 		paymentRepo:   paymentRepo,
 		settingRepo:   settingRepo,
+		customerRepo:  customerRepo,
 	}
 }
 
@@ -221,6 +225,15 @@ func (uc *OrderUsecase) GetOrder(ctx *gin.Context, id string) (*dto.OrderRespons
 	resp := orderToResponse(order)
 	resp.Items = orderItemsToResponse(items)
 
+	if order.CustomerID != "" {
+		customer, err := uc.customerRepo.FindByID(order.CustomerID)
+		if err == nil && customer.TenantID == tenantID {
+			resp.CustomerName = customer.Name
+			resp.CustomerPhone = customer.Phone
+			resp.CustomerAddress = customer.Address
+		}
+	}
+
 	return resp, http.StatusOK, nil
 }
 
@@ -241,11 +254,18 @@ func (uc *OrderUsecase) ListOrders(ctx *gin.Context, page, limit int, filters ma
 		if o.EstimatedDoneAt != nil {
 			estimated = o.EstimatedDoneAt.Format("2006-01-02T15:04:05Z")
 		}
+		customerName := ""
+		if o.CustomerID != "" {
+			customer, err := uc.customerRepo.FindByID(o.CustomerID)
+			if err == nil && customer.TenantID == tenantID {
+				customerName = customer.Name
+			}
+		}
 		responses = append(responses, dto.OrderListResponse{
 			ID:              o.ID,
 			InvoiceNumber:   o.InvoiceNumber,
 			CustomerID:      o.CustomerID,
-			CustomerName:    "",
+			CustomerName:    customerName,
 			Status:          string(o.Status),
 			OrderType:       o.OrderType,
 			TotalItems:      o.TotalItems,
@@ -371,23 +391,17 @@ func (uc *OrderUsecase) ProcessPayment(ctx *gin.Context, orderID string, req dto
 
 func (uc *OrderUsecase) generateInvoiceNumber(tenantID string) (string, error) {
 	now := time.Now()
-	datePrefix := fmt.Sprintf("INV-%s%02d-", now.Format("2006"), now.Month())
+	dateStr := now.Format("20060102")
 
-	lastOrder, err := uc.orderRepo.FindLastInvoiceToday(tenantID, datePrefix)
-	var seq int
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			seq = 1
-		} else {
-			return "", err
-		}
-	} else {
-		var lastSeq int
-		fmt.Sscanf(lastOrder.InvoiceNumber, datePrefix+"%d", &lastSeq)
-		seq = lastSeq + 1
+	const chars = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
+	random := make([]byte, 7)
+	for i := range random {
+		random[i] = chars[rand.Intn(len(chars))]
 	}
 
-	return fmt.Sprintf("%s%04d", datePrefix, seq), nil
+	invoice := fmt.Sprintf("INVL%s%s", dateStr, string(random))
+
+	return invoice, nil
 }
 
 func orderToResponse(o *domain.Order) *dto.OrderResponse {

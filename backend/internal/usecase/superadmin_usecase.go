@@ -17,6 +17,7 @@ type SuperadminUsecase struct {
 	subRepo     domain.SubscriptionRepository
 	planRepo    domain.SubscriptionPlanRepository
 	invoiceRepo domain.InvoiceRepository
+	paymentRepo domain.PaymentRepository
 }
 
 func NewSuperadminUsecase(
@@ -25,6 +26,7 @@ func NewSuperadminUsecase(
 	subRepo domain.SubscriptionRepository,
 	planRepo domain.SubscriptionPlanRepository,
 	invoiceRepo domain.InvoiceRepository,
+	paymentRepo domain.PaymentRepository,
 ) *SuperadminUsecase {
 	return &SuperadminUsecase{
 		companyRepo: companyRepo,
@@ -32,6 +34,7 @@ func NewSuperadminUsecase(
 		subRepo:     subRepo,
 		planRepo:    planRepo,
 		invoiceRepo: invoiceRepo,
+		paymentRepo: paymentRepo,
 	}
 }
 
@@ -165,14 +168,17 @@ func (uc *SuperadminUsecase) GetDashboardStats(ctx *gin.Context) (*dto.Dashboard
 
 	_, totalAllCount, _ := uc.companyRepo.FindAll(1, 1)
 
+	totalRevenue, _ := uc.paymentRepo.SumSuccessPayments()
+	monthlyRevenue, _ := uc.paymentRepo.SumSuccessPaymentsSince(firstOfMonth)
+
 	stats := &dto.DashboardStatsResponse{
 		TotalCompanies:        totalAllCount,
 		ActiveCompanies:       totalCompanies,
 		SuspendedCompanies:    suspended,
 		TrialCompanies:        trialCount,
 		ActiveSubscriptions:   activeSubCount,
-		MonthlyRevenue:        0,
-		TotalRevenue:          0,
+		MonthlyRevenue:        monthlyRevenue,
+		TotalRevenue:          totalRevenue,
 		NewCompaniesThisMonth: newThisMonth,
 	}
 

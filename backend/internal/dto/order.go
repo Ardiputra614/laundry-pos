@@ -40,6 +40,9 @@ type OrderItemResponse struct {
 type OrderResponse struct {
 	ID              string              `json:"id"`
 	CustomerID      string              `json:"customer_id"`
+	CustomerName    string              `json:"customer_name"`
+	CustomerPhone   string              `json:"customer_phone"`
+	CustomerAddress string              `json:"customer_address"`
 	UserID          string              `json:"user_id"`
 	InvoiceNumber   string              `json:"invoice_number"`
 	Status          string              `json:"status"`

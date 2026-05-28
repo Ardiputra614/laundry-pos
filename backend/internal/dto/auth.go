@@ -18,6 +18,12 @@ type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token" binding:"required"`
 }
 
+type UpdateProfileRequest struct {
+	FullName string `json:"full_name"`
+	Phone    string `json:"phone"`
+	Email    string `json:"email"`
+}
+
 type ChangePasswordRequest struct {
 	OldPassword string `json:"old_password" binding:"required"`
 	NewPassword string `json:"new_password" binding:"required,min=8"`

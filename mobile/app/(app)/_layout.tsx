@@ -59,13 +59,14 @@ export default function AppLayout() {
   const [showExpiryWarning, setShowExpiryWarning] = useState(false);
 
   useEffect(() => {
+    if (isSuperadmin) return;
     if (!subLoading && isLocked) {
       setShowSubModal(true);
       setShowExpiryWarning(false);
     } else if (!subLoading && isExpiringSoon && daysUntilExpiry !== null && daysUntilExpiry >= 0) {
       setShowExpiryWarning(true);
     }
-  }, [subLoading, isLocked, isExpiringSoon, daysUntilExpiry]);
+  }, [subLoading, isLocked, isExpiringSoon, daysUntilExpiry, isSuperadmin]);
 
   return (
     <>

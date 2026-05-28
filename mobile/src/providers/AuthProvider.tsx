@@ -5,6 +5,7 @@ import { AuthResponse, User } from '@/types';
 import { useAuthStore } from '@/stores/authStore';
 import { useSubscriptionStore } from '@/stores/subscriptionStore';
 import { startSyncEngine, stopSyncEngine } from '@/lib/sync';
+import { dbUsers } from '@/lib/database';
 
 interface AuthContextType {
   user: User | null;
@@ -38,30 +39,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       if (token) {
         const { data } = await api.get('/profile');
         setUser(data.data);
+        await dbUsers.upsert(data.data);
         await storeTenantInfo();
         startSyncEngine();
         fetchSubscription();
+        return;
       }
     } catch {
       await SecureStore.deleteItemAsync(TOKEN_KEY);
       await SecureStore.deleteItemAsync(REFRESH_KEY);
-    } finally {
-      setIsLoading(false);
     }
+    setIsLoading(false);
   }, []);
 
   useEffect(() => { restoreSession(); }, [restoreSession]);
 
   const login = async (email: string, password: string, deviceId?: string) => {
-    const { data } = await api.post<{ data: AuthResponse }>('/auth/login', {
-      email, password, device_id: deviceId,
-    });
-    await SecureStore.setItemAsync(TOKEN_KEY, data.data.access_token);
-    await SecureStore.setItemAsync(REFRESH_KEY, data.data.refresh_token);
-    setUser(data.data.user);
-    await storeTenantInfo();
-    startSyncEngine();
-    fetchSubscription();
+    try {
+      const { data } = await api.post<{ data: AuthResponse }>('/auth/login', {
+        email, password, device_id: deviceId,
+      });
+      await SecureStore.setItemAsync(TOKEN_KEY, data.data.access_token);
+      await SecureStore.setItemAsync(REFRESH_KEY, data.data.refresh_token);
+      setUser(data.data.user);
+      await dbUsers.upsert(data.data.user);
+      await storeTenantInfo();
+      startSyncEngine();
+      fetchSubscription();
+    } catch (err: any) {
+      if (!err.response) {
+        const localUser = await dbUsers.getByEmail(email);
+        if (localUser && localUser.role !== 'superadmin') {
+          setUser(localUser);
+          await storeTenantInfo();
+          startSyncEngine();
+          fetchSubscription();
+          return;
+        }
+      }
+      throw err;
+    }
   };
 
   const register = async (registerData: { email: string; password: string; full_name: string; phone?: string }) => {
@@ -69,6 +86,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     await SecureStore.setItemAsync(TOKEN_KEY, data.data.access_token);
     await SecureStore.setItemAsync(REFRESH_KEY, data.data.refresh_token);
     setUser(data.data.user);
+    await dbUsers.upsert(data.data.user);
     await storeTenantInfo();
     startSyncEngine();
     fetchSubscription();
@@ -86,6 +104,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const refreshUser = async () => {
     const { data } = await api.get('/profile');
     setUser(data.data);
+    await dbUsers.upsert(data.data);
   };
 
   return (
